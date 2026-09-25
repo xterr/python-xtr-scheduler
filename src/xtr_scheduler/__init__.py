@@ -1,2 +1,1 @@
-def hello() -> str:
-    return "Hello from xtr-scheduler!"
+"""Recurring messages on xtr-messenger, after Symfony's Scheduler component."""
