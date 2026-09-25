@@ -7,6 +7,8 @@ authors = [
     { name = "Razvan Ceana", email = "razvan@ceana.ro" }
 ]
 requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = []
 
 [build-system]
