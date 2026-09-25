@@ -1,6 +1,6 @@
 [project]
 name = "xtr-scheduler"
-version = "1.0.0"
+version = "1.0.1"
 description = "Recurring messages on xtr-messenger, after Symfony's Scheduler component. Not implemented yet."
 readme = "README.md"
 authors = [
