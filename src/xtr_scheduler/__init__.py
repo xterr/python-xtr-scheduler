@@ -1,1 +1,1 @@
-"""Recurring messages on xtr-messenger, after Symfony's Scheduler component."""
+"""Recurring messages on xtr-messenger. Not implemented yet."""

@@ -1,7 +1,7 @@
 [project]
 name = "xtr-scheduler"
 version = "1.1.0"
-description = "Recurring messages on xtr-messenger, after Symfony's Scheduler component. Not implemented yet."
+description = "Recurring messages on xtr-messenger. Not implemented yet."
 readme = "README.md"
 authors = [
     { name = "Razvan Ceana", email = "razvan@ceana.ro" }
@@ -9,7 +9,7 @@ authors = [
 requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE"]
-keywords = ["scheduler", "cron", "recurring", "messenger", "symfony"]
+keywords = ["scheduler", "cron", "recurring", "messenger"]
 classifiers = [
     "Development Status :: 1 - Planning",
     "Intended Audience :: Developers",
