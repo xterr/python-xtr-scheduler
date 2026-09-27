@@ -116,8 +116,11 @@ class Schedule(ScheduleProviderInterface):
         """Return where the schedule keeps what already ran, if anywhere."""
         return self._state
 
-    def process_only_last_missed_run(self, only_last_missed: bool) -> Self:
-        """After downtime, send only the latest missed run of each message, not every one."""
+    def process_only_last_missed_run(self, only_last_missed: bool = True) -> Self:
+        """After downtime, send only the latest missed run of each message, not every one.
+
+        Called with no argument it switches that on; ``False`` switches it back off.
+        """
         self._only_last_missed = only_last_missed
         return self
 

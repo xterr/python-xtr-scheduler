@@ -59,12 +59,19 @@ def test_removing_takes_the_message_out() -> None:
 def test_the_lock_the_state_and_catch_up_are_configured_fluently() -> None:
     lock, state = NoLock(), ArrayAdapter()
 
-    schedule = Schedule().lock(lock).stateful(state).process_only_last_missed_run(True)
+    schedule = Schedule().lock(lock).stateful(state).process_only_last_missed_run()
 
     assert schedule.get_lock() is lock
     assert schedule.get_state() is state
     assert schedule.should_process_only_last_missed_run()
     assert schedule.get_schedule() is schedule
+
+
+def test_catching_up_on_the_latest_run_only_is_switched_on_by_default_and_off_by_asking() -> None:
+    schedule = Schedule().process_only_last_missed_run()
+    assert schedule.should_process_only_last_missed_run()
+
+    assert not schedule.process_only_last_missed_run(False).should_process_only_last_missed_run()
 
 
 def test_its_listeners_are_kept_on_the_schedule_itself() -> None:

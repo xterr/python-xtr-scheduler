@@ -127,7 +127,7 @@ schedule = (
     Schedule(...)
     .lock(lock_factory.create_lock("schedule-default"))  # only the holder sends
     .stateful(cache_pool)  # progress survives restarts
-    .process_only_last_missed_run(True)  # after downtime, the latest run only
+    .process_only_last_missed_run()  # after downtime, the latest run only
 )
 ```
 
@@ -242,7 +242,7 @@ class AppSchedule(ScheduleProviderInterface):
         self._schedule = (
             Schedule()  # add recurring messages of your own here
             .stateful(cache)  # a restart resumes, sending what was missed
-            .process_only_last_missed_run(True)  # ...only the latest run of each, though
+            .process_only_last_missed_run()  # ...only the latest run of each, though
             .lock(locks.create_lock("scheduler-default"))  # one worker sends, however many run
         )
 

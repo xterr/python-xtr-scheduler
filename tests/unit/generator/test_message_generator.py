@@ -258,7 +258,7 @@ async def test_only_the_latest_missed_run_is_sent_when_the_schedule_asks() -> No
     clock = clock_at("22:15:00")
     cache = ArrayAdapter()
     recurring = RecurringMessage.every("1 minute", Named("message"), until=moment("22:23:00"))
-    schedule = Schedule(recurring).stateful(cache).process_only_last_missed_run(True)
+    schedule = Schedule(recurring).stateful(cache).process_only_last_missed_run()
     generator = MessageGenerator(schedule, "dummy", clock, Checkpoint("dummy", cache=cache))
 
     assert await drain(generator) == []
