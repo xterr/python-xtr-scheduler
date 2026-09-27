@@ -48,6 +48,11 @@ console = [
 [project.entry-points."xtr_messenger.transport_factories"]
 schedule = "xtr_scheduler.messenger.scheduler_transport_factory:SchedulerTransportFactory"
 
+# Advertises the bundle so debug:bundles can name it when installed but not listed.
+# Advertising activates nothing: an application lists the bundles it wants.
+[project.entry-points."xtr_dependency_injection.bundles"]
+scheduler = "xtr_scheduler.bundle:SchedulerBundle"
+
 [dependency-groups]
 dev = [
     "basedpyright>=1.21",
