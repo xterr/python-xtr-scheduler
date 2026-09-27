@@ -308,7 +308,9 @@ scheduler = Scheduler({PurgeSessions: purge}, [schedule], event_dispatcher=event
 await scheduler.run()  # until scheduler.stop()
 ```
 
-With a dispatcher, a `FailureEvent` listener may ignore an error rather than let it stop the run.
+With a dispatcher, a `FailureEvent` listener may ignore an error rather than let it stop the run. When `run()` returns, however it
+returns, every schedule's lock is handed back, so another process takes over at once;
+`await scheduler.close()` does the same for a scheduler that was never run.
 
 ## Known limitations
 

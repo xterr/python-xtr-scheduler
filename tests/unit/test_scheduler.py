@@ -7,6 +7,7 @@ from typing import final
 import pytest
 from xtr_clock import MockClock
 from xtr_event_dispatcher import EventDispatcher
+from xtr_lock import InMemoryStore, Key, Lock
 
 from tests.support.messages import Named
 from xtr_scheduler import RecurringMessage, Schedule
@@ -132,3 +133,13 @@ async def test_an_ignored_failure_lets_the_scheduler_carry_on() -> None:
 
     assert len(failures) == 2
     assert handler.seen == [Named("a"), Named("a")]
+
+
+async def test_a_run_hands_the_schedules_lock_back_when_it_returns() -> None:
+    lock = Lock(Key("schedule"), InMemoryStore())
+    handler = Handler(2)
+    scheduler, _clock = scheduler_for(handler, every_minute(Named("tick")).lock(lock))
+
+    await scheduler.run()
+
+    assert not await lock.is_acquired()

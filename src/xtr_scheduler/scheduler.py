@@ -84,18 +84,29 @@ class Scheduler:
                 ignored it.
         """
         self._stopped = False
-        while not self._stopped:
-            started = self._clock.now()
-            ran = False
-            for generator in self._generators:
-                async with aclosing(generator.get_messages()) as due:
-                    async for context, message in due:
-                        ran = await self._run(generator, context, message) or ran
-            if not ran:
-                elapsed = (self._clock.now() - started).total_seconds()
-                await self._clock.sleep_async(sleep - elapsed)
-            else:
-                await asyncio.sleep(0)
+        try:
+            while not self._stopped:
+                started = self._clock.now()
+                ran = False
+                for generator in self._generators:
+                    async with aclosing(generator.get_messages()) as due:
+                        async for context, message in due:
+                            ran = await self._run(generator, context, message) or ran
+                if not ran:
+                    elapsed = (self._clock.now() - started).total_seconds()
+                    await self._clock.sleep_async(sleep - elapsed)
+                else:
+                    await asyncio.sleep(0)
+        finally:
+            await self.close()
+
+    async def close(self) -> None:
+        """Hand back every schedule's lock, so another process need not wait for it to lapse.
+
+        :meth:`run` does so whenever it returns.
+        """
+        for generator in self._generators:
+            await generator.close()
 
     def stop(self) -> None:
         """Stop :meth:`run` once the messages in hand are handled."""
