@@ -213,6 +213,30 @@ uv run python -m app.console messenger:consume scheduler_default
 Configure `scheduler_<name>` yourself — `TransportConfig("schedule://default?use_messenger_routing=true")`
 — and yours is used instead. `SchedulerConfig(use_messenger_routing=True)` sets it for all of them.
 
+With the [cache bundle](../xtr-cache) active, a `scheduler` pool is added for schedules to keep
+their state in — on the app pool's adapter, under a namespace of its own, so checkpoints never mix
+with the application's values and `cache:pool:clear scheduler` clears them alone. Nothing uses it
+on its own; a schedule asks for it:
+
+```python
+from typing import Annotated
+
+from xtr_cache_contracts import CacheInterface
+from xtr_dependency_injection import Target
+
+
+@as_schedule("default")
+class DefaultSchedule(ScheduleProviderInterface):
+    def __init__(self, cache: Annotated[CacheInterface, Target("scheduler")]) -> None:
+        self._schedule = Schedule(...).stateful(cache)
+
+    def get_schedule(self) -> Schedule:
+        return self._schedule
+```
+
+Configure a `scheduler` pool yourself — `CacheConfig(pools={"scheduler": "redis://…"})` — and
+yours is used instead.
+
 `env="prod"` on a task keeps it to those environments, the way `@when` does for a service. With
 the event dispatcher bundle active, runs are announced; with the console bundle,
 `debug:scheduler` lists each schedule with every message's next run:

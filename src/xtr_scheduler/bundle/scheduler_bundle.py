@@ -6,12 +6,15 @@ An application listing :class:`SchedulerBundle` — which brings
 finds, built by the container with their dependencies, and each schedule
 consumable as ``scheduler_<name>`` — run it with ``messenger:consume
 scheduler_default``. With the event dispatcher bundle active, every run is
-announced; with the console bundle, ``debug:scheduler`` lists what runs next.
+announced; with the console bundle, ``debug:scheduler`` lists what runs next;
+with the cache bundle, a ``scheduler`` pool is there for schedules to keep
+their state in.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, final
+from dataclasses import replace
+from typing import TYPE_CHECKING, Final, final
 
 from typing_extensions import override
 from xtr_clock import ClockInterface
@@ -48,9 +51,29 @@ if TYPE_CHECKING:
 
     from xtr_scheduler.registry.task_declaration import TaskDeclaration
 
-__all__ = ["SchedulerBundle"]
+__all__ = ["SCHEDULER_POOL", "SchedulerBundle"]
 
 _TRANSPORT_FACTORY: str = "xtr_scheduler.schedule"
+
+SCHEDULER_POOL: Final = "scheduler"
+"""The cache pool added for schedules' saved state, when the cache bundle is active."""
+
+
+def _add_scheduler_pool(config: object) -> object:
+    """Add the ``scheduler`` pool to the cache config — on the app pool's adapter.
+
+    A pool of its own keeps checkpoints apart from the application's values,
+    under a namespace of their own, and clearable on their own. One the
+    application configured under that name is left as it is.
+    """
+    from xtr_cache.bundle import (  # noqa: PLC0415 — the cache bundle is active, so xtr-cache is installed
+        CacheConfig,
+        PoolConfig,
+    )
+
+    if not isinstance(config, CacheConfig) or SCHEDULER_POOL in config.pools:
+        return config
+    return replace(config, pools={SCHEDULER_POOL: PoolConfig(), **config.pools})
 
 
 @final
@@ -64,6 +87,17 @@ class SchedulerBundle(Bundle[SchedulerConfig]):
     def __init__(self) -> None:
         """Start with nothing declared."""
         self._declared = Declared()
+
+    @override
+    def prepend_extension(self, builder: ContainerBuilder) -> None:
+        """When the cache bundle is active, add a ``scheduler`` pool to its config.
+
+        Nothing uses it on its own: a schedule provider asks for it —
+        ``Annotated[CacheInterface, Target("scheduler")]`` — and hands it to
+        :meth:`Schedule.stateful <xtr_scheduler.schedule.Schedule.stateful>`.
+        """
+        if bundle_active(builder, "cache"):
+            builder.prepend_extension_config("cache", _add_scheduler_pool)
 
     @override
     def build(self, builder: ContainerBuilder) -> None:
