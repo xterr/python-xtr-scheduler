@@ -5,8 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from typing_extensions import override
+from xtr_messenger import as_message
 
 
+@as_message
 @dataclass(frozen=True, slots=True)
 class Named:
     """A message told apart by its name, with a string form of its own."""
