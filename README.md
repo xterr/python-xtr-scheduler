@@ -192,6 +192,27 @@ schedule is consumed. Stack the decorators for several runs.
 Without a container, `schedule://<name>` serves the declared schedules as discovery finds the
 transport — every class is built with no arguments.
 
+## Use in an application
+
+Everything adding this package to an application on
+[xtr-dependency-injection](../xtr-dependency-injection) takes — and, read backwards, what removing it undoes.
+
+- **Install** — `uv add "xtr-scheduler[cron,di,console]"`.
+- **Activate** — `SchedulerBundle: {"all": True}` in `BUNDLES` in `<app>/bundles.py`, imported
+  from `xtr_scheduler.bundle`.
+- **Brings along** — the messenger bundle; the event dispatcher and console bundles, when
+  those packages are installed.
+- **Configure** — optional: with no configuration every task joins a plain `default`
+  schedule, which keeps no state and takes no lock. For one that resumes after a restart and
+  sends each run once, copy [a starter schedule](#a-starter-schedule) into
+  `<app>/schedule.py` and activate the cache and lock bundles it needs.
+- **Environment** — nothing.
+- **Ignore** — nothing.
+- **Run** — a worker is `<script> messenger:consume scheduler_default`.
+- **Remove** — drop the `BUNDLES` entry, delete `<app>/schedule.py` and every
+  `@as_cron_task` / `@as_periodic_task`, then `uv remove xtr-scheduler`.
+- **Check** — `debug:scheduler` lists each schedule with every message's next run.
+
 ## Kernel / bundle
 
 ```python
