@@ -110,7 +110,8 @@ class RecurringMessage(MessageProviderInterface):
 
     def with_jitter(self, max_seconds: int = 60) -> RecurringMessage:
         """Return this recurring message, each run delayed at random by up to ``max_seconds``."""
-        return RecurringMessage(JitterTrigger(self._trigger, max_seconds), self._provider)
+        jitter = JitterTrigger(self._trigger, max_seconds, key=self._provider.id)
+        return RecurringMessage(jitter, self._provider)
 
     @property
     @override

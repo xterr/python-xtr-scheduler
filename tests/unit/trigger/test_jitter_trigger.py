@@ -13,14 +13,38 @@ from xtr_scheduler.trigger import CallbackTrigger, JitterTrigger, PeriodicalTrig
 
 
 def test_every_delay_is_within_the_bound_and_they_vary() -> None:
-    time = at("2026-01-01T10:00:00+00:00")
-    trigger = JitterTrigger(CallbackTrigger(lambda _run: time, "fixed"))
+    start = at("2026-01-01T00:00:00+00:00")
+    trigger = JitterTrigger(PeriodicalTrigger(3600, start))
 
-    runs = [trigger.get_next_run_date(time - timedelta(seconds=61)) for _ in range(100)]
+    delays: set[float] = set()
+    for hour in range(100):
+        slot = start + timedelta(hours=hour)
+        run = trigger.get_next_run_date(slot)
+        assert run is not None
+        delays.add((run - (slot + timedelta(hours=1))).total_seconds())
 
-    delays = {(run - time).total_seconds() for run in runs if run is not None}
     assert len(delays) > 1
     assert all(0 <= delay <= 60 for delay in delays)
+
+
+def test_one_run_is_delayed_the_same_way_every_time_it_is_asked_for() -> None:
+    time = at("2026-01-01T10:00:00+00:00")
+    first = JitterTrigger(CallbackTrigger(lambda _run: time, "fixed"), key="task")
+    second = JitterTrigger(CallbackTrigger(lambda _run: time, "fixed"), key="task")
+
+    runs = {trigger.get_next_run_date(time - timedelta(seconds=61)) for trigger in (first, second)}
+
+    assert len(runs) == 1
+
+
+def test_different_keys_spread_tasks_sharing_a_trigger() -> None:
+    start = at("2026-01-01T00:00:00+00:00")
+    runs = {
+        JitterTrigger(PeriodicalTrigger(60, start), key=f"task-{n}").get_next_run_date(start)
+        for n in range(20)
+    }
+
+    assert len(runs) > 1
 
 
 def test_a_delayed_run_does_not_skip_the_next_one() -> None:

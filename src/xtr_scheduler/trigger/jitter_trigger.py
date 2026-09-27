@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, final
 
 from typing_extensions import override
 
+from xtr_scheduler._time import microseconds
 from xtr_scheduler.exception import InvalidArgumentError
 
 from .abstract_decorated_trigger import AbstractDecoratedTrigger
@@ -27,6 +28,11 @@ class JitterTrigger(AbstractDecoratedTrigger):
     So a fleet of processes, or many tasks due at the same minute, do not all
     start at once. The delay is not carried forward: the next run is computed
     from the undelayed one, so the runs do not drift.
+
+    Each run's delay is drawn from the run itself, the wrapped trigger and
+    ``key``, so every process — and every restart — delays one run the same
+    way: a run already sent is recognised as such instead of coming back
+    under a new delay. Different keys spread tasks sharing a trigger.
     """
 
     def __init__(
@@ -35,8 +41,12 @@ class JitterTrigger(AbstractDecoratedTrigger):
         max_seconds: int = 60,
         *,
         random_source: random.Random | None = None,
+        key: str = "",
     ) -> None:
-        """Delay ``trigger``'s runs by 0 to ``max_seconds`` seconds, drawn from ``random_source``.
+        """Delay ``trigger``'s runs by 0 to ``max_seconds`` seconds.
+
+        ``random_source``, when given, draws every delay instead — delays
+        that no other process, nor a restart, repeats.
 
         Raises:
             InvalidArgumentError: If ``max_seconds`` is not positive.
@@ -45,7 +55,8 @@ class JitterTrigger(AbstractDecoratedTrigger):
             raise InvalidArgumentError('The "max_seconds" argument must be greater than zero.')
         super().__init__(trigger)
         self._max_seconds = max_seconds
-        self._random = random_source if random_source is not None else random.Random()  # noqa: S311 — spreading load, not secrecy
+        self._random = random_source
+        self._key = key
 
     @override
     def __str__(self) -> str:
@@ -65,4 +76,11 @@ class JitterTrigger(AbstractDecoratedTrigger):
             if advanced <= next_run:
                 break
             next_run = advanced
-        return next_run + timedelta(seconds=self._random.randint(0, self._max_seconds))
+        return next_run + timedelta(seconds=self._delay_of(next_run))
+
+    def _delay_of(self, run: datetime) -> int:
+        """Return the delay of the undelayed ``run``, in whole seconds."""
+        if self._random is not None:
+            return self._random.randint(0, self._max_seconds)
+        seed = f"{self._key}|{self._inner}|{microseconds(run)}"
+        return random.Random(seed).randint(0, self._max_seconds)  # noqa: S311 — spreading load, not secrecy
