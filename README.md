@@ -213,31 +213,54 @@ uv run python -m app.console messenger:consume scheduler_default
 Configure `scheduler_<name>` yourself — `TransportConfig("schedule://default?use_messenger_routing=true")`
 — and yours is used instead. `SchedulerConfig(use_messenger_routing=True)` sets it for all of them.
 
-With the [cache bundle](../xtr-cache) active, a `scheduler` pool is added for schedules to keep
-their state in — on the app pool's adapter, under a namespace of its own, so checkpoints never mix
-with the application's values and `cache:pool:clear scheduler` clears them alone. Nothing uses it
-on its own; a schedule asks for it:
+### A starter schedule
+
+Tasks alone need no schedule class: the bundle gathers them into a plain `Schedule` per name.
+A plain schedule keeps no state and takes no lock, though — a restarted worker starts from
+now, forgetting what it missed, and two workers both send every run. To choose, write the
+schedule the tasks join; this is a good first one to copy into the application:
 
 ```python
+# app/schedule.py
 from typing import Annotated
 
+from typing_extensions import override
 from xtr_cache_contracts import CacheInterface
 from xtr_dependency_injection import Target
+from xtr_lock import LockFactory
+from xtr_scheduler import Schedule, ScheduleProviderInterface
+from xtr_scheduler.decorator import as_schedule
 
 
-@as_schedule("default")
-class DefaultSchedule(ScheduleProviderInterface):
-    def __init__(self, cache: Annotated[CacheInterface, Target("scheduler")]) -> None:
-        self._schedule = Schedule(...).stateful(cache)
+@as_schedule()  # "default" — every task not naming a schedule joins this one
+class AppSchedule(ScheduleProviderInterface):
+    def __init__(
+        self,
+        cache: Annotated[CacheInterface, Target("scheduler")],
+        locks: LockFactory,
+    ) -> None:
+        self._schedule = (
+            Schedule()  # add recurring messages of your own here
+            .stateful(cache)  # a restart resumes, sending what was missed
+            .process_only_last_missed_run(True)  # ...only the latest run of each, though
+            .lock(locks.create_lock("scheduler-default"))  # one worker sends, however many run
+        )
 
+    @override
     def get_schedule(self) -> Schedule:
         return self._schedule
 ```
 
+The `scheduler` pool it asks for exists when the [cache bundle](../xtr-cache) is active: the
+scheduler bundle adds it on the app pool's adapter, under a namespace of its own, so checkpoints
+never mix with the application's values and `cache:pool:clear scheduler` clears them alone.
 Configure a `scheduler` pool yourself — `CacheConfig(pools={"scheduler": "redis://…"})` — and
-yours is used instead.
+yours is used instead. Nothing uses the pool on its own. `LockFactory` comes from the
+[lock bundle](../xtr-lock): its default resource keeps file locks, enough for workers on one
+machine; give it a Redis store for several.
 
-`env="prod"` on a task keeps it to those environments, the way `@when` does for a service. With
+`env="prod"` on a task keeps it to those environments, the way `@when` does for a service; its
+schedule stays, empty if nothing else is on it, so a worker can be started for it anywhere. With
 the event dispatcher bundle active, runs are announced; with the console bundle,
 `debug:scheduler` lists each schedule with every message's next run:
 

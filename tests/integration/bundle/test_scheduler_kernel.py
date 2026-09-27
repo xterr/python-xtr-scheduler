@@ -14,6 +14,7 @@ from xtr_messenger import InMemoryTransport, MessageBusConfig, TransportFactory,
 
 from tests.fixtures.app_scheduler.services import Journal
 from tests.fixtures.app_scheduler_override.schedule import HANDLED, Tock
+from xtr_scheduler.schedule_provider_locator import ScheduleProviderLocator
 
 if TYPE_CHECKING:
     from contextlib import AbstractAsyncContextManager
@@ -72,3 +73,20 @@ async def test_an_application_s_own_scheduler_transport_wins() -> None:
     assert HANDLED == ["RedispatchMessage"]
     assert isinstance(tocks, InMemoryTransport)
     assert tocks.messages == (Tock(),)
+
+
+async def test_a_schedule_whose_tasks_are_all_elsewhere_is_still_consumable() -> None:
+    kernel = Kernel("tests.fixtures.app_scheduler_prod_only", env="test")
+    async with await boot_for_test(kernel, overrides={Clock: Clock(MockClock(START))}) as booted:
+        workers = await booted.container.get(WorkerFactory)
+        schedules = await booted.container.get(ScheduleProviderLocator)
+
+        worker = workers.worker(["scheduler_nightly"])
+        running = asyncio.create_task(worker.run())
+        await asyncio.sleep(0)
+        worker.stop()
+        await asyncio.wait_for(running, 1)
+
+        nightly = (await schedules.get("nightly")).get_schedule()
+
+    assert nightly.recurring_messages == ()

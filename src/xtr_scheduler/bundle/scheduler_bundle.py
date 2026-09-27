@@ -104,7 +104,8 @@ class SchedulerBundle(Bundle[SchedulerConfig]):
         """Collect declared schedules and tasks; register the pass that makes them consumable.
 
         A task declared for other environments (``env=``) is left out, the
-        way ``@when`` leaves out a service.
+        way ``@when`` leaves out a service — but its schedule stays, empty if
+        nothing else is on it, so a worker can be started for it anywhere.
         """
         declared = self._declared
         environment = str(builder.get_parameter("kernel.environment"))
@@ -118,6 +119,7 @@ class SchedulerBundle(Bundle[SchedulerConfig]):
             obj: object, declaration: TaskDeclaration, services: ServiceConfigurator
         ) -> None:
             if not declaration.exists_in(environment):
+                declared.add_schedule(declaration.schedule)
                 return
             declared.add_task(obj, declaration)
             if isinstance(obj, type):

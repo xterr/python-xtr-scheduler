@@ -18,7 +18,7 @@ __all__ = ["Declared"]
 class Declared:
     """The schedule providers and tasks one kernel found, filled in while it builds."""
 
-    __slots__ = ("functions", "providers", "task_classes", "tasks")
+    __slots__ = ("functions", "providers", "schedules", "task_classes", "tasks")
 
     def __init__(self) -> None:
         """Start with nothing declared."""
@@ -26,6 +26,7 @@ class Declared:
         self.tasks: list[tuple[str, TaskDeclaration]] = []
         self.task_classes: dict[str, type[object]] = {}
         self.functions: dict[str, object] = {}
+        self.schedules: dict[str, None] = {}
 
     def add_provider(self, name: str, provider: type[object]) -> None:
         """Record ``provider`` as the provider of the schedule ``name``.
@@ -40,8 +41,18 @@ class Declared:
             )
         self.providers[name] = provider
 
+    def add_schedule(self, name: str) -> None:
+        """Record that the schedule ``name`` exists, even with none of its tasks here.
+
+        A schedule whose tasks all belong to other environments still exists in
+        this one — empty — so its receiver does too, and a worker started for it
+        runs rather than failing on an unknown transport.
+        """
+        self.schedules[name] = None
+
     def add_task(self, target: object, declaration: TaskDeclaration) -> None:
         """Record ``declaration``, calling ``target``."""
+        self.add_schedule(declaration.schedule)
         name = task_name(target)
         if isinstance(target, type):
             self.task_classes[name] = target
@@ -52,7 +63,7 @@ class Declared:
     def names(self) -> tuple[str, ...]:
         """Return every schedule name, providers first, in the order found."""
         found = dict.fromkeys(self.providers)
-        found.update(dict.fromkeys(declaration.schedule for _name, declaration in self.tasks))
+        found.update(self.schedules)
         return tuple(found)
 
     def recurring_messages(self, schedule: str) -> list[RecurringMessage]:
