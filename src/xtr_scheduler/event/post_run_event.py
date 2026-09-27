@@ -1,0 +1,51 @@
+"""Dispatched after a scheduled message was handled."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, final
+
+from xtr_event_dispatcher_contracts import Event
+
+if TYPE_CHECKING:
+    from xtr_scheduler.generator.message_context import MessageContext
+    from xtr_scheduler.schedule_provider_interface import ScheduleProviderInterface
+
+__all__ = ["PostRunEvent"]
+
+
+@final
+class PostRunEvent(Event):
+    """A scheduled message was handled, and returned :attr:`result`."""
+
+    def __init__(
+        self,
+        schedule: ScheduleProviderInterface,
+        context: MessageContext,
+        message: object,
+        result: object = None,
+    ) -> None:
+        """Describe ``message``, run for ``context`` of ``schedule``, which returned ``result``."""
+        self._schedule = schedule
+        self._context = context
+        self._message = message
+        self._result = result
+
+    @property
+    def schedule(self) -> ScheduleProviderInterface:
+        """Return the schedule the message belongs to."""
+        return self._schedule
+
+    @property
+    def context(self) -> MessageContext:
+        """Return the run the message was produced for."""
+        return self._context
+
+    @property
+    def message(self) -> object:
+        """Return the message."""
+        return self._message
+
+    @property
+    def result(self) -> object:
+        """Return what handling the message returned; ``None`` when it returned nothing."""
+        return self._result
