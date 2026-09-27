@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Final, final
 from typing_extensions import override
 from xtr_clock import Clock
 
-from xtr_scheduler._time import EPOCH
+from xtr_scheduler._time import EPOCH, microseconds
 from xtr_scheduler.exception import SchedulerLogicError
 from xtr_scheduler.trigger.stateful_trigger_interface import StatefulTriggerInterface
 
@@ -120,26 +120,37 @@ class MessageGenerator(MessageGeneratorInterface):
         if self._wait_until is None:
             return
         now = self._clock.now()
-        if self._wait_until > now or not await checkpoint.acquire(now):
+        # Every comparison is between instants: two dates on one zone compare by
+        # their wall clock, and the hour a clock goes back happens twice on it.
+        now_at = microseconds(now)
+        if microseconds(self._wait_until) > now_at or not await checkpoint.acquire(now):
             return
 
         last_time = checkpoint.time()
         last_index = checkpoint.index()
         heap = self._heap_for(last_time, checkpoint.from_(), last_index)
 
-        while heap and heap.top()[0] <= now:
+        last_at = microseconds(last_time)
+        while heap and microseconds(heap.top()[0]) <= now_at:
             time, index, recurring_message = heap.extract()
+            time_at = microseconds(time)
             # Already sent: before what was last sent, or at that time but not after it.
-            send = time > last_time or (time == last_time and index > last_index)
-            time = max(time, last_time)
-            next_time = self._next_time(recurring_message.get_trigger(), time)
+            send = time_at > last_at or (time_at == last_at and index > last_index)
+            time = time if time_at >= last_at else last_time
+            trigger = recurring_message.get_trigger()
+            if send and self.schedule.should_process_only_last_missed_run():
+                latest = self._latest_due(trigger, time, now_at)
+                if latest is not time:
+                    # Sent when its turn comes, so what is recorded as sent
+                    # never moves backwards.
+                    heap.insert(latest, index, recurring_message)
+                    continue
+            next_time = self._next_time(trigger, time)
             if next_time is not None:
                 heap.insert(next_time, index, recurring_message)
             if not send:
                 continue
-            context = MessageContext(
-                self._name, recurring_message.id, recurring_message.get_trigger(), time, next_time
-            )
+            context = MessageContext(self._name, recurring_message.id, trigger, time, next_time)
             try:
                 async for message in recurring_message.get_messages(context):
                     yield context, message
@@ -162,8 +173,23 @@ class MessageGenerator(MessageGeneratorInterface):
             self._wait_until = EPOCH
             self._schedule.set_restart(False)
 
-    def _next_time(self, trigger: TriggerInterface, time: datetime) -> datetime | None:
-        """Return when ``trigger`` fires after ``time`` — skipping past missed runs if asked.
+    @staticmethod
+    def _latest_due(trigger: TriggerInterface, time: datetime, now_at: int) -> datetime:
+        """Return the latest run of ``trigger`` due by ``now_at``, counting from the due ``time``.
+
+        ``time`` itself when no later run is due yet. A trigger that does not
+        move forward stops the walk; :meth:`_next_time` reports it.
+        """
+        latest = time
+        candidate = trigger.get_next_run_date(time)
+        while candidate is not None and microseconds(latest) < microseconds(candidate) <= now_at:
+            latest = candidate
+            candidate = trigger.get_next_run_date(candidate)
+        return latest
+
+    @staticmethod
+    def _next_time(trigger: TriggerInterface, time: datetime) -> datetime | None:
+        """Return when ``trigger`` fires after ``time``.
 
         Raises:
             SchedulerLogicError: If the trigger answers a date not strictly
@@ -171,15 +197,7 @@ class MessageGenerator(MessageGeneratorInterface):
         """
         previous_time = time
         next_time = trigger.get_next_run_date(time)
-        if self.schedule.should_process_only_last_missed_run():
-            while (
-                next_time is not None
-                and next_time > previous_time
-                and next_time < self._clock.now()
-            ):
-                previous_time = next_time
-                next_time = trigger.get_next_run_date(next_time)
-        if next_time is not None and next_time <= previous_time:
+        if next_time is not None and microseconds(next_time) <= microseconds(previous_time):
             raise SchedulerLogicError(
                 f'The "{trigger}" trigger does not move the run date forward. Its '
                 '"get_next_run_date()" method must return a date strictly after the given one.'
@@ -188,7 +206,7 @@ class MessageGenerator(MessageGeneratorInterface):
 
     def _heap_for(self, time: datetime, start_time: datetime, last_index: int) -> TriggerHeap:
         """Return the plan of what runs next, rebuilding it when it is older than ``time``."""
-        if self._heap is not None and self._heap.time <= time:
+        if self._heap is not None and microseconds(self._heap.time) <= microseconds(time):
             return self._heap
         heap = TriggerHeap(time)
         # The first plan of a process resuming a batch it half sent (last_index

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import aclosing
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, final
 
 import pytest
@@ -21,7 +22,6 @@ from xtr_scheduler.trigger import TriggerInterface
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from datetime import datetime
 
 pytestmark = pytest.mark.anyio
 
@@ -34,6 +34,10 @@ def scripted(message: object, *runs: str) -> RecurringMessage:
 
 async def drain(generator: MessageGenerator) -> list[object]:
     return [message async for _context, message in generator.get_messages()]
+
+
+async def triggered_at(generator: MessageGenerator) -> list[datetime]:
+    return [context.triggered_at async for context, _message in generator.get_messages()]
 
 
 async def collect_into(sent: list[object], generator: MessageGenerator) -> None:
@@ -263,11 +267,11 @@ async def test_only_the_latest_missed_run_is_sent_when_the_schedule_asks() -> No
 
     assert await drain(generator) == []
     clock.sleep(60 + 10)
-    assert len(await drain(generator)) == 1
+    assert await triggered_at(generator) == [moment("22:16:00")]
     clock.sleep(2 * 60)
-    assert len(await drain(generator)) == 1
+    assert await triggered_at(generator) == [moment("22:18:00")]
     clock.sleep(5 * 60)
-    assert len(await drain(generator)) == 1
+    assert await triggered_at(generator) == [moment("22:22:00")]  # the last before "until"
 
 
 async def test_a_batch_left_half_sent_is_finished_by_the_next_process() -> None:
@@ -404,3 +408,97 @@ async def test_closing_hands_the_schedule_s_lock_back() -> None:
 
 async def test_closing_before_ever_running_does_nothing() -> None:
     await MessageGenerator(Schedule(), "dummy", clock_at("22:12:00")).close()
+
+
+async def test_both_passes_of_the_hour_a_clock_goes_back_are_sent_in_order() -> None:
+    """Europe/Bucharest goes back from 04:00 to 03:00 on 2026-10-25, so 03:00 happens twice."""
+    clock = MockClock(datetime(2026, 10, 24, 23, 55, tzinfo=UTC))
+    hourly = RecurringMessage.cron("0 * * * *", Named("hourly"), timezone="Europe/Bucharest")
+    generator = MessageGenerator(Schedule(hourly), "dst", clock, Checkpoint("dst"))
+    triggered: list[datetime] = []
+
+    for _ in range(8):
+        async for context, _message in generator.get_messages():
+            triggered.append(context.triggered_at)
+        clock.sleep(20 * 60)
+
+    assert [run.astimezone(UTC) for run in triggered] == [
+        datetime(2026, 10, 25, 0, tzinfo=UTC),
+        datetime(2026, 10, 25, 1, tzinfo=UTC),
+        datetime(2026, 10, 25, 2, tzinfo=UTC),
+    ]
+
+
+async def test_only_the_latest_missed_run_is_sent_after_a_restart() -> None:
+    clock = clock_at("22:15:00")
+    cache = ArrayAdapter()
+
+    def process() -> MessageGenerator:
+        recurring = RecurringMessage.every("1 minute", Named("message"))
+        schedule = Schedule(recurring).stateful(cache).process_only_last_missed_run()
+        return MessageGenerator(schedule, "dummy", clock, Checkpoint("dummy", cache=cache))
+
+    first = process()
+    assert await drain(first) == []
+    clock.sleep(60 + 10)
+    assert await triggered_at(first) == [moment("22:16:00")]
+
+    clock.sleep(4 * 60 - 5)
+    assert await triggered_at(process()) == [moment("22:20:00")]
+
+
+async def test_a_run_due_exactly_now_is_the_one_latest_missed_run() -> None:
+    clock = clock_at("22:15:00")
+    recurring = RecurringMessage.every("1 minute", Named("message"))
+    schedule = Schedule(recurring).process_only_last_missed_run()
+    generator = MessageGenerator(schedule, "dummy", clock, Checkpoint("dummy"))
+
+    assert await drain(generator) == []
+    clock.sleep(5 * 60)
+    assert await triggered_at(generator) == [moment("22:20:00")]
+
+
+async def test_a_jittered_run_is_not_sent_again_after_a_restart() -> None:
+    clock = clock_at("22:15:00")
+    cache = ArrayAdapter()
+
+    def process() -> MessageGenerator:
+        # A one-second bound makes an undelayed run common: that is the run a
+        # restart used to draw a fresh delay for, and send a second time.
+        recurring = RecurringMessage.every("1 minute", Named("message")).with_jitter(1)
+        schedule = Schedule(recurring).stateful(cache)
+        return MessageGenerator(schedule, "dummy", clock, Checkpoint("dummy", cache=cache))
+
+    first = process()
+    assert await drain(first) == []
+    sent: list[datetime] = []
+    for _ in range(90):
+        clock.sleep(20)
+        sent.extend([context.triggered_at async for context, _ in first.get_messages()])
+        sent.extend([context.triggered_at async for context, _ in process().get_messages()])
+
+    minutes = [run.replace(second=0, microsecond=0) for run in sent]
+    assert len(minutes) == len(set(minutes))
+
+
+async def test_latest_missed_runs_of_several_messages_are_not_sent_again_after_a_restart() -> None:
+    clock = clock_at("22:15:00")
+    cache = ArrayAdapter()
+
+    def process() -> MessageGenerator:
+        schedule = (
+            Schedule(
+                RecurringMessage.every("1 minute", FIRST),
+                RecurringMessage.every("3 minutes", SECOND),
+            )
+            .stateful(cache)
+            .process_only_last_missed_run()
+        )
+        return MessageGenerator(schedule, "dummy", clock, Checkpoint("dummy", cache=cache))
+
+    first = process()
+    assert await drain(first) == []
+    clock.sleep(5 * 60 + 5)
+
+    assert await drain(first) == [SECOND, FIRST]
+    assert await drain(process()) == []

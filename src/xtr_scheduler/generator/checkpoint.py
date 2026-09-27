@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Final, final
 
 from typing_extensions import override
 
+from xtr_scheduler._time import microseconds
 from xtr_scheduler.exception import SchedulerRuntimeError
 
 from .checkpoint_interface import CheckpointInterface
@@ -136,7 +137,7 @@ class Checkpoint(CheckpointInterface):
             return
         # Keep the lock until the next run. The lock may have run out during a
         # long run, and stores refuse a lifetime that is negative or too short.
-        ttl = (next_time - now).total_seconds() + remaining
+        ttl = (microseconds(next_time) - microseconds(now)) / 1_000_000 + remaining
         if ttl >= _MINIMUM_TTL:
             await self._lock.refresh(ttl)
 
