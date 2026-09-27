@@ -133,13 +133,15 @@ class Checkpoint(CheckpointInterface):
             await self._lock.release()
             return
         remaining = self._lock.get_remaining_lifetime()
-        if not remaining:
+        # A lock that never expires needs no refresh; one that already lapsed
+        # may be another process's by now, and is not fought over.
+        if remaining is None or remaining <= 0:
             return
         # Keep the lock until the next run. The lock may have run out during a
-        # long run, and stores refuse a lifetime that is negative or too short.
+        # long run, and stores refuse a lifetime that is negative or too short:
+        # a lifetime too short is raised to the least one, never skipped.
         ttl = (microseconds(next_time) - microseconds(now)) / 1_000_000 + remaining
-        if ttl >= _MINIMUM_TTL:
-            await self._lock.refresh(ttl)
+        await self._lock.refresh(max(ttl, _MINIMUM_TTL))
 
     @override
     async def close(self) -> None:

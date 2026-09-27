@@ -204,9 +204,9 @@ async def test_the_lock_is_refreshed_to_outlive_the_next_run() -> None:
 
 @pytest.mark.parametrize(
     ("remaining", "next_in"),
-    [(-190.0, timedelta(seconds=60)), (0.4, timedelta(milliseconds=500)), (None, timedelta(1))],
+    [(-190.0, timedelta(seconds=60)), (0.0, timedelta(seconds=60)), (None, timedelta(1))],
 )
-async def test_the_lock_is_not_refreshed_to_a_lifetime_a_store_would_refuse(
+async def test_a_lock_that_lapsed_or_never_expires_is_not_refreshed(
     remaining: float | None, next_in: timedelta
 ) -> None:
     lock = RecordingLock(remaining=remaining)
@@ -216,6 +216,16 @@ async def test_the_lock_is_not_refreshed_to_a_lifetime_a_store_would_refuse(
     await checkpoint.release(NOW, NOW + next_in)
 
     assert (lock.refreshed, lock.released) == ([], 0)
+
+
+async def test_a_lifetime_too_short_for_a_store_is_raised_to_the_least_one() -> None:
+    lock = RecordingLock(remaining=0.4)
+    checkpoint = Checkpoint("dummy", lock)
+    _ = await checkpoint.acquire(NOW - timedelta(seconds=10))
+
+    await checkpoint.release(NOW, NOW + timedelta(milliseconds=500))
+
+    assert (lock.refreshed, lock.released) == ([1.0], 0)
 
 
 async def test_the_saved_state_outlives_the_pool_s_default_lifetime() -> None:
