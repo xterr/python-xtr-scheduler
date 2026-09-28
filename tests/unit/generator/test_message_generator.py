@@ -502,3 +502,24 @@ async def test_latest_missed_runs_of_several_messages_are_not_sent_again_after_a
 
     assert await drain(first) == [SECOND, FIRST]
     assert await drain(process()) == []
+
+
+async def test_two_processes_sharing_a_lock_and_a_cache_send_each_run_once() -> None:
+    clock = clock_at("22:15:00")
+    store, cache = InMemoryStore(), ArrayAdapter()
+
+    def process() -> MessageGenerator:
+        recurring = RecurringMessage.every("1 minute", Named("message"))
+        schedule = Schedule(recurring).lock(Lock(Key("schedule"), store)).stateful(cache)
+        return MessageGenerator(schedule, "dummy", clock)
+
+    first, second = process(), process()
+    sent = await triggered_at(first) + await triggered_at(second)
+    clock.sleep(60 + 10)
+    sent += await triggered_at(first) + await triggered_at(second)
+    await first.close()
+    clock.sleep(60)
+    taken_over = await triggered_at(second)
+
+    assert sent == [moment("22:16:00")]
+    assert taken_over == [moment("22:17:00")]
