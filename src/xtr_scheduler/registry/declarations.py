@@ -25,6 +25,7 @@ __all__ = [
     "declared_schedule_class",
     "declared_schedule_names",
     "declared_tasks",
+    "reset_declarations",
     "schedules_declared_on",
     "task_name",
     "tasks_declared_on",
@@ -107,3 +108,15 @@ def _own(obj: object, attribute: str) -> tuple[object, ...]:
 
 def _append(obj: object, attribute: str, value: object) -> None:
     setattr(obj, attribute, (*_own(obj, attribute), value))
+
+
+def reset_declarations() -> None:
+    """Forget every schedule and task declared in this process.
+
+    What the process-wide declarations hold is kept for good — a module is
+    imported once — so a test declaring its own calls this to start from
+    nothing, and to leave nothing for the next. The marks on the classes and
+    functions themselves stay: a kernel's scan still finds them.
+    """
+    _SCHEDULES.clear()
+    _TASKS.clear()
