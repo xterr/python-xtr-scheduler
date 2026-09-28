@@ -6,9 +6,9 @@ import hashlib
 import random
 import re
 from typing import TYPE_CHECKING, Final, final
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from typing_extensions import override
+from xtr_clock import InvalidTimezoneError, resolve_timezone
 
 from xtr_scheduler.exception import InvalidArgumentError, SchedulerLogicError
 
@@ -120,11 +120,16 @@ class CronExpressionTrigger(TriggerInterface):
 
 
 def _zone(timezone: tzinfo | str | None) -> tzinfo | None:
+    """Read ``timezone`` as the clock reads one — a name, ``"Z"``, an offset such as ``"+02:00"``.
+
+    Raises:
+        InvalidArgumentError: If it names no zone.
+    """
     if not isinstance(timezone, str):
         return timezone
     try:
-        return ZoneInfo(timezone)
-    except (ZoneInfoNotFoundError, ValueError) as exc:
+        return resolve_timezone(timezone)
+    except InvalidTimezoneError as exc:
         raise InvalidArgumentError(f'The timezone "{timezone}" is not known.') from exc
 
 

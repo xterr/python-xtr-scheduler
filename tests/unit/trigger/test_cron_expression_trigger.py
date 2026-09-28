@@ -119,6 +119,16 @@ def test_a_timezone_given_is_the_clock_it_reads() -> None:
     assert next_run == at("2026-01-01T12:00:00+00:00")
 
 
+@pytest.mark.parametrize("timezone", ["Z", "+02:00"])
+def test_a_timezone_is_read_as_the_clock_reads_one(timezone: str) -> None:
+    trigger = CronExpressionTrigger.from_spec("0 12 * * *", timezone=timezone)
+
+    next_run = trigger.get_next_run_date(at("2026-01-01T13:00:00+00:00"))
+
+    assert next_run is not None
+    assert (next_run.hour, next_run.minute) == (12, 0)
+
+
 def test_an_unknown_timezone_is_refused() -> None:
     with pytest.raises(InvalidArgumentError, match='timezone "Mars/Olympus" is not known'):
         _ = CronExpressionTrigger.from_spec("0 12 * * *", timezone="Mars/Olympus")
