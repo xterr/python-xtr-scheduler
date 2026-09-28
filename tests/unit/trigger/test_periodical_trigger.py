@@ -213,3 +213,15 @@ def test_the_default_end_is_far_away_in_utc() -> None:
     trigger = PeriodicalTrigger(60, "2999-12-31T23:59:30+00:00")
 
     assert trigger.get_next_run_date(at("2999-12-31T23:59:30+00:00")) is None
+
+
+def test_a_daily_run_at_a_skipped_hour_is_labelled_with_the_hour_that_replaced_it() -> None:
+    start = datetime(2026, 3, 27, 3, 30, tzinfo=ZoneInfo("Europe/Bucharest"))
+    daily = PeriodicalTrigger("1 day", start)
+
+    first = daily.get_next_run_date(start)
+    assert first is not None
+    skipped = daily.get_next_run_date(first)
+
+    assert skipped is not None
+    assert skipped.isoformat() == "2026-03-29T04:30:00+03:00"

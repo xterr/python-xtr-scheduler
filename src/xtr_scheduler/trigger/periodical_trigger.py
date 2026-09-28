@@ -8,11 +8,11 @@ from datetime import datetime, timedelta
 from typing import Final, final
 
 from typing_extensions import override
+from xtr_clock import shift_calendar
 
 from xtr_scheduler._time import (
     EPOCH,
     FAR_FUTURE,
-    add_months,
     aware,
     from_microseconds,
     microseconds,
@@ -203,8 +203,7 @@ def _steps_before(start: datetime, step: _CalendarStep, run: datetime) -> int:
 def _shift(start: datetime, months: int, days: int) -> datetime:
     """Move ``start`` by whole months, then whole days, on its own wall clock.
 
-    A month landing past the end of a shorter one lands on its last day.
+    A month landing past the end of a shorter one lands on its last day, and
+    a wall clock the zone skipped over is shown on the hour that replaced it.
     """
-    if months:
-        start = add_months(start, months)
-    return start + timedelta(days=days) if days else start
+    return shift_calendar(start, months=months, days=days)

@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 import pytest
 
 from tests.support.dates import at
-from xtr_scheduler._time import add_months, aware, from_microseconds, microseconds
+from xtr_scheduler._time import aware, from_microseconds, microseconds
 from xtr_scheduler.exception import InvalidArgumentError
 
 
@@ -25,8 +25,3 @@ def test_microseconds_round_trip_exactly() -> None:
     moment = at("2026-01-01T00:00:00.000001+00:00")
 
     assert from_microseconds(microseconds(moment), UTC) == moment
-
-
-def test_adding_months_keeps_the_day_or_lands_on_the_month_s_last() -> None:
-    assert add_months(at("2026-01-31T09:00:00+00:00"), 1) == at("2026-02-28T09:00:00+00:00")
-    assert add_months(at("2026-11-15T09:00:00+00:00"), 3) == at("2027-02-15T09:00:00+00:00")

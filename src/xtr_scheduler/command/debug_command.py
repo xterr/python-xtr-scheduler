@@ -6,11 +6,10 @@ from datetime import UTC, datetime
 from typing import Annotated, ClassVar, Final, final
 
 from xtr_cache_contracts import CacheItemPoolInterface
-from xtr_clock import DatePoint, now
+from xtr_clock import DatePoint, now, shift_calendar
 from xtr_clock.exception import ClockError
 from xtr_console import ConsoleStyle, ExitCode, Option, as_command, escape
 
-from xtr_scheduler._time import add_months
 from xtr_scheduler.recurring_message import RecurringMessage
 from xtr_scheduler.schedule import Schedule
 from xtr_scheduler.schedule_provider_locator import ScheduleProviderLocator
@@ -177,9 +176,9 @@ def format_interval(start: datetime, end: datetime) -> str:
     first, last = (end, start) if overdue else (start, end)
     first, last = first.astimezone(UTC), last.astimezone(UTC)
     months = (last.year - first.year) * 12 + last.month - first.month
-    if add_months(first, months) > last:
+    if shift_calendar(first, months=months) > last:
         months -= 1
-    rest = last - add_months(first, months)
+    rest = last - shift_calendar(first, months=months)
     hours, remainder = divmod(rest.seconds, 3600)
     minutes, seconds = divmod(remainder, 60)
     parts = [

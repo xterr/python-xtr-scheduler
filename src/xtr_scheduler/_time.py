@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import calendar
 from datetime import UTC, datetime, timedelta, tzinfo
 from typing import Final
 
 from .exception import InvalidArgumentError
 
-__all__ = ["EPOCH", "FAR_FUTURE", "add_months", "aware", "from_microseconds", "microseconds"]
+__all__ = ["EPOCH", "FAR_FUTURE", "aware", "from_microseconds", "microseconds"]
 
 EPOCH: Final = datetime(1970, 1, 1, tzinfo=UTC)
 
@@ -45,14 +44,3 @@ def microseconds(value: datetime) -> int:
 def from_microseconds(value: int, zone: tzinfo | None) -> datetime:
     """Return the instant ``value`` microseconds after the epoch, shown in ``zone``."""
     return (EPOCH + timedelta(microseconds=value)).astimezone(zone)
-
-
-def add_months(start: datetime, months: int) -> datetime:
-    """Move ``start`` by whole months on its own wall clock.
-
-    A day past the end of a shorter month lands on that month's last day.
-    """
-    total = start.month - 1 + months
-    year, month = start.year + total // 12, total % 12 + 1
-    day = min(start.day, calendar.monthrange(year, month)[1])
-    return start.replace(year=year, month=month, day=day)
