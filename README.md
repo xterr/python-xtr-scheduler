@@ -235,6 +235,8 @@ uv run python -m app.console messenger:consume scheduler_default
 
 Configure `scheduler_<name>` yourself — `TransportConfig("schedule://default?use_messenger_routing=true")`
 — and yours is used instead. `SchedulerConfig(use_messenger_routing=True)` sets it for all of them.
+The transport asks for due runs once a second, so a run starts up to a second after it falls due;
+nothing is skipped, as a late run is still sent.
 
 ### A starter schedule
 
