@@ -57,7 +57,7 @@ def test_an_interval_it_cannot_read_is_refused(interval: str) -> None:
 
 @pytest.mark.parametrize(
     "interval",
-    [-3600, "0", 0, "PT0S", "P0D", "0 seconds", "0 days", timedelta(0), 0.5],
+    [-3600, "0", 0, "PT0S", "P0D", "0 seconds", "0 days", timedelta(0), 0.0000001],
 )
 def test_an_interval_that_is_not_positive_is_refused(interval: int | str | timedelta) -> None:
     with pytest.raises(InvalidArgumentError, match="must be greater than zero"):
@@ -79,10 +79,39 @@ def test_a_boolean_is_not_a_number_of_seconds() -> None:
         ("2 hours", "every 2 hours"),
         (timedelta(seconds=2), "every 2 seconds"),
         (timedelta(milliseconds=1500), "every 1.5 seconds"),
+        (1.5, "every 1.5 seconds"),
     ],
 )
 def test_it_describes_itself(interval: int | str | timedelta, expected: str) -> None:
-    assert str(PeriodicalTrigger(interval, _FROM)) == expected
+    assert str(PeriodicalTrigger(interval)) == expected
+
+
+def test_it_describes_the_bounds_it_was_given() -> None:
+    trigger = PeriodicalTrigger("1 hour", _FROM, "2026-06-01T00:00:00+00:00")
+
+    assert str(trigger) == (
+        "every 1 hour from 2022-02-22T13:34:00+01:00 until 2026-06-01T00:00:00+00:00"
+    )
+
+
+def test_two_windows_of_one_interval_describe_themselves_apart() -> None:
+    first = PeriodicalTrigger("1 hour", until="2026-06-01T00:00:00+00:00")
+    second = PeriodicalTrigger("1 hour", until="2027-06-01T00:00:00+00:00")
+
+    assert str(first) != str(second)
+
+
+def test_a_fractional_number_of_seconds_is_kept() -> None:
+    trigger = PeriodicalTrigger(1.5, "2026-01-01T00:00:00+00:00")
+
+    assert trigger.get_next_run_date(at("2026-01-01T00:00:00+00:00")) == at(
+        "2026-01-01T00:00:01.500000+00:00"
+    )
+
+
+def test_a_run_date_without_a_timezone_is_refused_as_the_package_refuses_dates() -> None:
+    with pytest.raises(InvalidArgumentError, match="has no timezone"):
+        _ = PeriodicalTrigger(60).get_next_run_date(datetime(2026, 1, 1))
 
 
 @pytest.mark.parametrize(

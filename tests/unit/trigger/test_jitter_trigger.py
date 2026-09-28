@@ -94,7 +94,7 @@ def test_an_inner_trigger_that_ends_ends_the_jitter_too() -> None:
 
 
 def test_it_describes_itself_through_what_it_wraps() -> None:
-    trigger = JitterTrigger(PeriodicalTrigger(20, "2026-01-01T00:00:00+00:00"), 15)
+    trigger = JitterTrigger(PeriodicalTrigger(20), 15)
 
     assert str(trigger) == "every 20 seconds with 0-15 second jitter"
 

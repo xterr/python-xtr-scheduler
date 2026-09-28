@@ -84,7 +84,12 @@ class PeriodicalTrigger(StatefulTriggerInterface):
         self._until = aware(until, "end date")
         self._interval_us = 0
         self._step: _CalendarStep | None = None
-        self._description = self._read(interval)
+        # The bounds given are part of what the trigger is: two windows of one
+        # interval are two triggers, and describe themselves apart.
+        bounds = "" if self._from is None else f" from {self._from.isoformat()}"
+        if until is not FAR_FUTURE:
+            bounds += f" until {self._until.isoformat()}"
+        self._description = self._read(interval) + bounds
 
     @override
     def __str__(self) -> str:
@@ -93,10 +98,11 @@ class PeriodicalTrigger(StatefulTriggerInterface):
     @override
     def continue_(self, started_at: datetime, /) -> None:
         if self._from is None:
-            self._from = started_at
+            self._from = aware(started_at, "start date")
 
     @override
     def get_next_run_date(self, run: datetime, /) -> datetime | None:
+        run = aware(run, "run date")
         if self._from is None:
             self._from = run
         if self._step is not None:
@@ -130,10 +136,12 @@ class PeriodicalTrigger(StatefulTriggerInterface):
         """
         if isinstance(interval, bool):
             raise InvalidArgumentError(f'Invalid interval "{interval}".')
-        if isinstance(interval, (int, float)) or (isinstance(interval, str) and interval.isdigit()):
-            seconds = int(interval)
-            self._interval_us = _positive(seconds * _MICROSECONDS_PER_SECOND)
-            return f"every {seconds} seconds"
+        if isinstance(interval, str) and interval.isdigit():
+            interval = int(interval)
+        if isinstance(interval, (int, float)):
+            # Rounded to the microsecond, as a timedelta is: 1.5 is a second and a half.
+            self._interval_us = _positive(round(interval * _MICROSECONDS_PER_SECOND))
+            return f"every {_seconds(self._interval_us)} seconds"
         if isinstance(interval, timedelta):
             self._interval_us = _positive(interval // timedelta(microseconds=1))
             return f"every {_seconds(self._interval_us)} seconds"

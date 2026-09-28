@@ -111,3 +111,11 @@ def test_a_message_no_codec_can_carry_is_identified_by_its_repr() -> None:
 
     assert first.id == again.id
     assert first.id != other.id
+
+
+def test_two_windows_of_one_message_are_two_recurring_messages() -> None:
+    message = Plain()
+    first = RecurringMessage.every("1 hour", message, until="2026-06-01T00:00:00+00:00")
+    second = RecurringMessage.every("1 hour", message, until="2027-06-01T00:00:00+00:00")
+
+    assert first.id != second.id
