@@ -35,7 +35,10 @@ class DispatchSchedulerEventListener(EventSubscriberInterface):
 
     Listens to the worker events of whichever worker handles the message —
     the one consuming the scheduler transport, or one the message was
-    redispatched to, since the :class:`ScheduledStamp` travels with it. Each
+    redispatched to, since the :class:`ScheduledStamp` travels with it. A
+    run redispatched is announced there alone, where it is really handled;
+    one routed to a transport no worker with this listener consumes — or to
+    ``sync://`` — is not announced at all. Each
     event goes to the application's dispatcher first, then to the listeners
     of the schedule itself (:meth:`Schedule.before
     <xtr_scheduler.schedule.Schedule.before>` and the like).
@@ -107,7 +110,18 @@ class DispatchSchedulerEventListener(EventSubscriberInterface):
     async def _scheduled(
         self, envelope: Envelope
     ) -> tuple[ScheduleProviderInterface, ScheduledStamp] | None:
-        """Return the provider and stamp of a message from a schedule known here."""
+        """Return the provider and stamp of a message from a schedule known here.
+
+        ``None`` for a redispatch carrying the run on to where it is handled:
+        that worker announces it — once, with what handling it returned.
+        """
+        message = envelope.message
+        if (
+            isinstance(message, RedispatchMessage)
+            and isinstance(message.envelope, Envelope)
+            and message.envelope.last(ScheduledStamp) is not None
+        ):
+            return None
         stamp = envelope.last(ScheduledStamp)
         if stamp is None or not self._providers.has(stamp.name):
             return None

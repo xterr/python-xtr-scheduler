@@ -155,7 +155,9 @@ schedule.on_failure(lambda event: alert(event.message, event.error))
 `PreRunEvent` (a listener may cancel the run — the worker then skips the message),
 `PostRunEvent` (with what handling returned) and `FailureEvent`. They come from the worker that
 handles the message, through `DispatchSchedulerEventListener` subscribed to the messenger's worker
-events — the application's dispatcher hears them first, then the schedule's own listeners.
+events — the application's dispatcher hears them first, then the schedule's own listeners. A run
+redispatched through routing is announced once, by the worker that handles it where it lands: one
+sent to `sync://`, or to a transport no worker with the listener consumes, is not announced.
 
 ## Declaring tasks
 

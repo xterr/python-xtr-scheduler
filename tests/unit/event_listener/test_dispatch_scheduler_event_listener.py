@@ -88,11 +88,31 @@ async def test_listeners_see_the_message_inside_a_redispatch() -> None:
     app = EventDispatcher()
     seen: list[PreRunEvent] = []
     app.add_listener(PreRunEvent, seen.append)
-    envelope = scheduled(RedispatchMessage(Envelope(Named("inner"), (STAMP,))))
+    envelope = scheduled(RedispatchMessage(Envelope(Named("inner"))))
 
     await listener(Schedule(), app).on_message_received(WorkerMessageReceivedEvent(envelope, "t"))
 
     assert [event.message for event in seen] == [Named("inner")]
+
+
+async def test_a_redispatch_carrying_the_run_is_announced_where_the_run_is_handled() -> None:
+    app = EventDispatcher()
+    seen: list[object] = []
+    for event_type in (PreRunEvent, PostRunEvent):
+        app.add_listener(event_type, seen.append)
+    inner = Envelope(Named("inner"), (STAMP,))
+    outer = scheduled(RedispatchMessage(inner))
+    subscriber = listener(Schedule(), app)
+
+    await subscriber.on_message_received(WorkerMessageReceivedEvent(outer, "scheduler_default"))
+    await subscriber.on_message_handled(WorkerMessageHandledEvent(outer, "scheduler_default"))
+    await subscriber.on_message_received(WorkerMessageReceivedEvent(inner, "async"))
+    handled = inner.with_stamps(HandledStamp("handler", 42))
+    await subscriber.on_message_handled(WorkerMessageHandledEvent(handled, "async"))
+
+    assert [type(event) for event in seen] == [PreRunEvent, PostRunEvent]
+    assert isinstance(seen[1], PostRunEvent)
+    assert seen[1].result == 42
 
 
 async def test_the_application_hears_first_and_the_schedule_after() -> None:

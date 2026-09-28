@@ -84,7 +84,8 @@ async def test_a_redispatched_run_lands_where_routing_sends_it() -> None:
         "2026-01-01T00:01:00+00:00",
         "2026-01-01T00:02:00+00:00",
     ]
-    assert [event.message for event in ran] == [Named("report"), Named("report")]
+    # Announced where "reports" is consumed and the run really handled, not here.
+    assert ran == []
 
 
 async def test_stopping_the_worker_ends_the_wait_for_the_next_run() -> None:
