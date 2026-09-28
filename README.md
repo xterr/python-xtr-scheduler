@@ -199,7 +199,8 @@ transport — every class is built with no arguments.
 Everything adding this package to an application on
 [xtr-dependency-injection](../xtr-dependency-injection) takes — and, read backwards, what removing it undoes.
 
-- **Install** — `uv add "xtr-scheduler[cron,di,console]"`.
+- **Install** — `uv add "xtr-scheduler[cron,di,console]"`; add `cache` for the `scheduler` cache
+  pool a schedule can keep its state in.
 - **Activate** — `SchedulerBundle: {"all": True}` in `BUNDLES` in `<app>/bundles.py`, imported
   from `xtr_scheduler.bundle`.
 - **Brings along** — the messenger bundle; the event dispatcher and console bundles, when

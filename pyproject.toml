@@ -41,6 +41,9 @@ di = [
 console = [
     "xtr-console>=1.0,<2",
 ]
+cache = [
+    "xtr-cache>=1.0,<2",
+]
 
 # The scheduler's transport, for applications without a container: the
 # schedule:// scheme serves the schedules declared with @as_schedule and the
