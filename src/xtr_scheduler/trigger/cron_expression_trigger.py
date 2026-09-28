@@ -93,6 +93,7 @@ class CronExpressionTrigger(TriggerInterface):
                 )
             expression = _unhash(expression, context)
         try:
+            # The cron bridge is behind an extra.
             from xtr_scheduler.bridge.croniter import CroniterCronExpression  # noqa: PLC0415
         except ImportError as exc:  # pragma: no cover — the cron extra is a dev dependency
             raise SchedulerLogicError(
