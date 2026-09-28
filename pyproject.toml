@@ -24,6 +24,9 @@ dependencies = [
     "typing-extensions>=4.4",
     "xtr-cache-contracts>=1.0,<2",
     "xtr-clock>=1.0,<2",
+    # The implementation too, not only the contracts: a schedule keeps its own
+    # before/after/failure listeners on an EventDispatcher, and the listener
+    # announcing runs is an EventSubscriberInterface, which only it defines.
     "xtr-event-dispatcher>=1.0,<2",
     "xtr-event-dispatcher-contracts>=1.0,<2",
     "xtr-lock>=1.0,<2",
