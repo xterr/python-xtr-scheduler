@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import random
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -19,7 +19,8 @@ def test_every_delay_is_within_the_bound_and_they_vary() -> None:
     delays: set[float] = set()
     for hour in range(100):
         slot = start + timedelta(hours=hour)
-        run = trigger.get_next_run_date(slot)
+        # Asked from past where the slot's own run can land, as a scheduler that sent it would.
+        run = trigger.get_next_run_date(slot + timedelta(seconds=60))
         assert run is not None
         delays.add((run - (slot + timedelta(hours=1))).total_seconds())
 
@@ -47,14 +48,37 @@ def test_different_keys_spread_tasks_sharing_a_trigger() -> None:
     assert len(runs) > 1
 
 
-def test_a_delayed_run_does_not_skip_the_next_one() -> None:
+def _delayed(run: datetime, named: str) -> datetime:
+    """Where ``run`` of the trigger ``named`` lands with up to 60 seconds of jitter, keyed "task".
+
+    A trigger yielding that one run, under the same name and key, delays it
+    the way the named one does: a delay depends on nothing else.
+    """
+    only = CallbackTrigger(lambda after: run if after < run else None, named)
+    delayed = JitterTrigger(only, 60, key="task").get_next_run_date(run - timedelta(seconds=61))
+    assert delayed is not None
+    return delayed
+
+
+def test_no_run_is_lost_when_the_jitter_is_longer_than_the_interval() -> None:
     start = at("2026-07-07T16:30:00+00:00")
-    trigger = JitterTrigger(PeriodicalTrigger(10, start), 15)
+    every_ten = PeriodicalTrigger(10, start)
+    trigger = JitterTrigger(every_ten, 60, key="task")
+    low, high = start + timedelta(seconds=660), start + timedelta(seconds=1500)
+    # Only runs from after start + 600 s can land after start + 660 s.
+    undelayed = (start + timedelta(seconds=600 + 10 * n) for n in range(1, 91))
+    expected = sorted(
+        {delayed for run in undelayed if low < (delayed := _delayed(run, str(every_ten))) <= high}
+    )
 
-    next_run = trigger.get_next_run_date(start + timedelta(seconds=12))
+    seen: list[datetime] = []
+    run: datetime | None = start
+    while run is not None and run <= high:
+        if run > low:
+            seen.append(run)
+        run = trigger.get_next_run_date(run)
 
-    assert next_run is not None
-    assert start + timedelta(seconds=20) <= next_run <= start + timedelta(seconds=35)
+    assert seen == expected
 
 
 def test_the_delay_comes_from_the_random_source_given() -> None:
@@ -68,7 +92,7 @@ def test_the_delay_comes_from_the_random_source_given() -> None:
 def test_runs_do_not_drift_by_the_delays() -> None:
     start = at("2026-01-01T00:00:00+00:00")
     trigger = JitterTrigger(PeriodicalTrigger(60, start), 30)
-    run = start
+    run = start + timedelta(seconds=30)  # past where the run at start lands
     for minute in range(1, 20):
         next_run = trigger.get_next_run_date(run)
         assert next_run is not None

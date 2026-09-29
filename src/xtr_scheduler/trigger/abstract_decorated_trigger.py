@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import ABCMeta, abstractmethod
 from typing import TYPE_CHECKING, final
 
 from typing_extensions import override
@@ -18,12 +18,14 @@ if TYPE_CHECKING:
 __all__ = ["AbstractDecoratedTrigger"]
 
 
-class AbstractDecoratedTrigger(StatefulTriggerInterface, ABC):
+class AbstractDecoratedTrigger(StatefulTriggerInterface, metaclass=ABCMeta):
     """Wraps another trigger, which stays reachable for describing the schedule.
 
     Passes the schedule's starting point on to the wrapped trigger, so a
     decorated "every hour" is anchored the same way an undecorated one is.
     """
+
+    __slots__: tuple[str, ...] = ("_inner",)
 
     def __init__(self, inner: TriggerInterface) -> None:
         """Decorate ``inner``."""

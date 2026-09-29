@@ -381,6 +381,19 @@ async def test_between_runs_it_says_when_the_next_one_is_due() -> None:
     assert generator.wait_until == moment("22:13:00")
 
 
+async def test_stopping_early_still_says_when_the_next_run_is_due() -> None:
+    clock = clock_at("22:12:00")
+    generator = MessageGenerator(Schedule(scripted(FIRST, "22:13:00", "22:14:00")), "dummy", clock)
+    assert await drain(generator) == []
+    move(clock, "22:14:10")
+
+    async with aclosing(generator.get_messages()) as messages:
+        async for _pair in messages:
+            break
+
+    assert generator.wait_until == moment("22:14:00")
+
+
 async def test_a_schedule_with_nothing_left_to_run_stops_for_good() -> None:
     clock = clock_at("22:12:00")
     generator = MessageGenerator(

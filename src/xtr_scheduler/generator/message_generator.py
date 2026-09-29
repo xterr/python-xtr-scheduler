@@ -131,34 +131,37 @@ class MessageGenerator(MessageGeneratorInterface):
         heap = self._heap_for(last_time, checkpoint.from_(), last_index)
 
         last_at = microseconds(last_time)
-        while heap and microseconds(heap.top()[0]) <= now_at:
-            time, index, recurring_message = heap.extract()
-            time_at = microseconds(time)
-            # Already sent: before what was last sent, or at that time but not after it.
-            send = time_at > last_at or (time_at == last_at and index > last_index)
-            time = time if time_at >= last_at else last_time
-            trigger = recurring_message.get_trigger()
-            if send and self.schedule.should_process_only_last_missed_run():
-                latest = self._latest_due(trigger, time, now_at)
-                if latest is not time:
-                    # Sent when its turn comes, so what is recorded as sent
-                    # never moves backwards.
-                    heap.insert(latest, index, recurring_message)
+        try:
+            while heap and microseconds(heap.top()[0]) <= now_at:
+                time, index, recurring_message = heap.extract()
+                time_at = microseconds(time)
+                # Already sent: before what was last sent, or at that time but not after it.
+                send = time_at > last_at or (time_at == last_at and index > last_index)
+                time = time if time_at >= last_at else last_time
+                trigger = recurring_message.get_trigger()
+                if send and self.schedule.should_process_only_last_missed_run():
+                    latest = self._latest_due(trigger, time, now_at)
+                    if latest is not time:
+                        # Sent when its turn comes, so what is recorded as sent
+                        # never moves backwards.
+                        heap.insert(latest, index, recurring_message)
+                        continue
+                next_time = self._next_time(trigger, time)
+                if next_time is not None:
+                    heap.insert(next_time, index, recurring_message)
+                if not send:
                     continue
-            next_time = self._next_time(trigger, time)
-            if next_time is not None:
-                heap.insert(next_time, index, recurring_message)
-            if not send:
-                continue
-            context = MessageContext(self._name, recurring_message.id, trigger, time, next_time)
-            try:
-                async for message in recurring_message.get_messages(context):
-                    yield context, message
-            finally:
-                await checkpoint.save(time, index)
-
-        self._wait_until = heap.top()[0] if heap else None
-        await checkpoint.release(now, self._wait_until)
+                context = MessageContext(self._name, recurring_message.id, trigger, time, next_time)
+                try:
+                    async for message in recurring_message.get_messages(context):
+                        yield context, message
+                finally:
+                    await checkpoint.save(time, index)
+        finally:
+            # Iteration stopped early is still a run that ended: say what is due next,
+            # and keep the lock until then.
+            self._wait_until = heap.top()[0] if heap else None
+            await checkpoint.release(now, self._wait_until)
 
     @override
     async def close(self) -> None:

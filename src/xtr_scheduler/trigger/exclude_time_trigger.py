@@ -27,6 +27,8 @@ class ExcludeTimeTrigger(AbstractDecoratedTrigger):
     through at its end.
     """
 
+    __slots__: tuple[str, ...] = ("_from", "_until")
+
     def __init__(
         self,
         inner: TriggerInterface,

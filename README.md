@@ -203,8 +203,8 @@ Everything adding this package to an application on
   pool a schedule can keep its state in.
 - **Activate** — `SchedulerBundle: {"all": True}` in `BUNDLES` in `<app>/bundles.py`, imported
   from `xtr_scheduler.bundle`.
-- **Brings along** — the messenger bundle; the event dispatcher and console bundles, when
-  those packages are installed.
+- **Brings along** — the messenger bundle always, because schedules are sent through it; the
+  event dispatcher and console bundles, when those packages are installed.
 - **Configure** — optional: with no configuration every task joins a plain `default`
   schedule, which keeps no state and takes no lock. For one that resumes after a restart and
   sends each run once, copy [a starter schedule](#a-starter-schedule) into

@@ -27,13 +27,17 @@ class JitterTrigger(AbstractDecoratedTrigger):
 
     So a fleet of processes, or many tasks due at the same minute, do not all
     start at once. The delay is not carried forward: the next run is computed
-    from the undelayed one, so the runs do not drift.
+    from the undelayed one, so the runs do not drift. A delay longer than the
+    interval makes runs land out of their order; they come in the order they
+    land, none of them lost.
 
     Each run's delay is drawn from the run itself, the wrapped trigger and
     ``key``, so every process — and every restart — delays one run the same
     way: a run already sent is recognised as such instead of coming back
     under a new delay. Different keys spread tasks sharing a trigger.
     """
+
+    __slots__: tuple[str, ...] = ("_key", "_max_seconds", "_random")
 
     def __init__(
         self,
@@ -64,19 +68,23 @@ class JitterTrigger(AbstractDecoratedTrigger):
 
     @override
     def get_next_run_date(self, run: datetime, /) -> datetime | None:
-        # ``run`` includes a delay; step back past any delay to find the undelayed run.
-        next_run = self._inner.get_next_run_date(run - timedelta(seconds=self._max_seconds))
-        if next_run is None:
-            return None
-        # That may be the run that just happened: move on to the one after it.
-        while next_run <= run:
-            advanced = self._inner.get_next_run_date(next_run)
-            if advanced is None:
-                return None
-            if advanced <= next_run:
-                break
-            next_run = advanced
-        return next_run + timedelta(seconds=self._delay_of(next_run))
+        # ``run`` is a delayed instant, and delayed runs may land out of order when the
+        # delay outlasts the interval: the next one is the earliest landing after ``run``
+        # of any undelayed run a delay could carry past it.
+        earliest: datetime | None = None
+        candidate = self._inner.get_next_run_date(run - timedelta(seconds=self._max_seconds))
+        # A run after the earliest landing lands after it too.
+        while candidate is not None and (earliest is None or candidate < earliest):
+            delayed = candidate + timedelta(seconds=self._delay_of(candidate))
+            if delayed > run and (earliest is None or delayed < earliest):
+                earliest = delayed
+            advanced = self._inner.get_next_run_date(candidate)
+            if advanced is not None and advanced <= candidate:
+                # A trigger that does not move forward: answer its run as it is, and
+                # let the scheduler report it rather than end the schedule quietly.
+                return earliest if earliest is not None else delayed
+            candidate = advanced
+        return earliest
 
     def _delay_of(self, run: datetime) -> int:
         """Return the delay of the undelayed ``run``, in whole seconds."""
