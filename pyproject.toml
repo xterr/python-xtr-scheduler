@@ -1,6 +1,6 @@
 [project]
 name = "xtr-scheduler"
-version = "1.5.0"
+version = "2.0.0"
 description = "Recurring messages on xtr-messenger: cron and periodic triggers, catch-up after downtime, locks and saved state across restarts."
 readme = "README.md"
 authors = [
@@ -22,16 +22,16 @@ classifiers = [
 ]
 dependencies = [
     "typing-extensions>=4.4",
-    "xtr-cache-contracts>=1.0,<2",
-    "xtr-clock>=1.0,<2",
+    "xtr-cache-contracts>=2.0,<3",
+    "xtr-clock>=2.0,<3",
     # The implementation too, not only the contracts: a schedule keeps its own
     # before/after/failure listeners on an EventDispatcher, and the listener
     # announcing runs is an EventSubscriberInterface, which only it defines.
-    "xtr-event-dispatcher>=1.0,<2",
-    "xtr-event-dispatcher-contracts>=1.0,<2",
-    "xtr-lock>=1.0,<2",
-    "xtr-messenger>=1.0,<2",
-    "xtr-service-contracts>=1.0,<2",
+    "xtr-event-dispatcher>=2.0,<3",
+    "xtr-event-dispatcher-contracts>=2.0,<3",
+    "xtr-lock>=2.0,<3",
+    "xtr-messenger>=2.0,<3",
+    "xtr-service-contracts>=2.0,<3",
 ]
 
 [project.optional-dependencies]
@@ -39,13 +39,13 @@ cron = [
     "croniter>=6.2.4,<7",
 ]
 di = [
-    "xtr-dependency-injection>=1.0,<2",
+    "xtr-dependency-injection>=2.0,<3",
 ]
 console = [
-    "xtr-console>=1.0,<2",
+    "xtr-console>=2.0,<3",
 ]
 cache = [
-    "xtr-cache>=1.0,<2",
+    "xtr-cache>=2.0,<3",
 ]
 
 # The scheduler's transport, for applications without a container: the
@@ -69,11 +69,11 @@ dev = [
     "ty>=0.0.83",
     "croniter>=6.2.4,<7",
     "types-croniter>=6.0",
-    "xtr-cache>=1.0,<2",
-    "xtr-console>=1.0,<2",
-    "xtr-dependency-injection>=1.0,<2",
-    "xtr-logging>=1.0,<2",
-    "xtr-service-contracts>=1.0,<2",
+    "xtr-cache>=2.0,<3",
+    "xtr-console>=2.0,<3",
+    "xtr-dependency-injection>=2.0,<3",
+    "xtr-logging>=2.0,<3",
+    "xtr-service-contracts>=2.0,<3",
 ]
 
 [build-system]
