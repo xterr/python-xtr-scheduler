@@ -59,6 +59,10 @@ schedule = "xtr_scheduler.messenger.scheduler_transport_factory:SchedulerTranspo
 [project.entry-points."xtr_dependency_injection.bundles"]
 scheduler = "xtr_scheduler.bundle:SchedulerBundle"
 
+# Advertises the recipe — what *Use in an application* takes — for recipes:sync.
+[project.entry-points."xtr_recipes"]
+scheduler = "xtr_scheduler.recipe"
+
 [dependency-groups]
 dev = [
     "basedpyright>=1.21",

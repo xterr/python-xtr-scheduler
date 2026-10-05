@@ -201,6 +201,10 @@ Everything adding this package to an application on
 
 - **Install** — `uv add "xtr-scheduler[cron,di,console]"`; add `cache` for the `scheduler` cache
   pool a schedule can keep its state in.
+- **Recipe** — `uv run xtr-recipes recipes:sync` does the *Activate* step below: it lists
+  `SchedulerBundle`, which brings the messenger bundle with it. There is no config file,
+  environment or ignore line to write; it prints the steps to declare your recurring work and copy
+  the starter schedule, which a recipe cannot make for you.
 - **Activate** — `SchedulerBundle: {"all": True}` in `BUNDLES` in `<app>/bundles.py`, imported
   from `xtr_scheduler.bundle`.
 - **Brings along** — the messenger bundle always, because schedules are sent through it; the

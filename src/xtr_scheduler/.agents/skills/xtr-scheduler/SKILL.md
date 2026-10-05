@@ -221,6 +221,10 @@ in-memory `Lock` through `.lock(...)` to test a takeover.
 
 ## Use in an application
 
+`uv run xtr-recipes recipes:sync` applies the recipe shipped with this package: it lists
+`SchedulerBundle`, which brings the messenger bundle with it. That is the steps below a recipe can
+do; the tasks and starter schedule it prints for you to make.
+
 1. **Install** — `uv add "xtr-scheduler[cron,di,console]"`; add xtr-cache for the `scheduler` pool a
    schedule keeps its state in, and xtr-lock for `LockFactory`.
 2. **Activate** — `SchedulerBundle: {"all": True}` in `BUNDLES` in `<app>/bundles.py`

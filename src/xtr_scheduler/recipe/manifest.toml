@@ -1,0 +1,24 @@
+# The recipe for xtr-scheduler: what *Use in an application* in the README
+# takes, as data. Keep the two in step — the README is the source.
+
+[bundles]
+# "<module>:<class>" = the environments it is listed with, exactly as in BUNDLES.
+# It brings the messenger bundle with it, because a schedule is sent through it.
+"xtr_scheduler.bundle:SchedulerBundle" = { all = true }
+
+# No [files]: configuring is optional. With none every task joins a plain
+# "default" schedule, which keeps no state and takes no lock — see [notes] for
+# the one that resumes after a restart.
+
+# No [env], and nothing to ignore.
+
+[gitignore]
+lines = []
+
+[notes]
+steps = [
+  "Declare the recurring work with @as_cron_task / @as_periodic_task: an empty schedule has nothing to send.",
+  "For a schedule that resumes after a restart and sends each run once, copy the starter schedule from the README into <app>/schedule.py, and activate the cache and lock bundles it asks for.",
+]
+check = ["<script> debug:scheduler — each schedule, with every message's next run"]
+run = ["<script> messenger:consume scheduler_default"]
