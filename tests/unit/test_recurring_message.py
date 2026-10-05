@@ -29,7 +29,7 @@ def test_a_hashed_expression_picks_from_the_message_s_string_form() -> None:
     task = Named("my task")
 
     assert str(RecurringMessage.cron("#midnight", task).get_trigger()) == str(
-        CronExpressionTrigger.from_spec("#midnight", "my task")
+        CronExpressionTrigger.from_expression("#midnight", "my task")
     )
 
 

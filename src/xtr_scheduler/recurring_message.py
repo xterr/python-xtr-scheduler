@@ -84,13 +84,15 @@ class RecurringMessage(MessageProviderInterface):
                 has no string form of its own, or the expression is invalid.
         """
         if not CronExpressionTrigger.is_hashed(expression):
-            return cls.trigger(CronExpressionTrigger.from_spec(expression, None, timezone), message)
+            return cls.trigger(
+                CronExpressionTrigger.from_expression(expression, None, timezone), message
+            )
         if not _has_own_str(message):
             raise InvalidArgumentError(
                 'A message must be stringable to use "hashed" cron expressions.'
             )
         return cls.trigger(
-            CronExpressionTrigger.from_spec(expression, str(message), timezone), message
+            CronExpressionTrigger.from_expression(expression, str(message), timezone), message
         )
 
     @classmethod

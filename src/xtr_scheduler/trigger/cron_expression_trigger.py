@@ -73,7 +73,7 @@ class CronExpressionTrigger(TriggerInterface):
         self._timezone = _zone(timezone)
 
     @classmethod
-    def from_spec(
+    def from_expression(
         cls,
         expression: str = "* * * * *",
         context: str | None = None,

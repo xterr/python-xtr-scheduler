@@ -78,12 +78,14 @@ class SchedulerTransportFactory(TransportFactoryInterface):
         """
         providers = self._resolved_providers()
         built: dict[str, SenderInterface] = {}
-        for transport_name, spec in group.items():
-            reject_unknown_options(SCHEDULE_SCHEME, spec.settings, SCHEDULE_OPTIONS)
-            name = _schedule_name(spec.parsed.connection)
+        for transport_name, transport in group.items():
+            reject_unknown_options(SCHEDULE_SCHEME, transport.settings, SCHEDULE_OPTIONS)
+            name = _schedule_name(transport.parsed.connection)
             if not providers.has(name):
                 raise InvalidArgumentError(f'The schedule "{name}" is not found.')
-            routing = as_bool(spec.settings, "use_messenger_routing", self._use_messenger_routing)
+            routing = as_bool(
+                transport.settings, "use_messenger_routing", self._use_messenger_routing
+            )
             built[transport_name] = SchedulerTransport(
                 LocatedMessageGenerator(providers, name, self._clock),
                 name=transport_name,
