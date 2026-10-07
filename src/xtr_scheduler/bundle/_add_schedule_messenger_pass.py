@@ -4,16 +4,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Final, final
 
-from xtr_clock import ClockInterface
 from xtr_dependency_injection import (
     Definition,
     Origin,
     named_factory,
-    optional_service,
 )
 from xtr_messenger import MessageBusConfig
 from xtr_messenger.bundle import RECEIVER_TAG
-from xtr_service_contracts import ContainerInterface
 
 from xtr_scheduler.messenger._located_message_generator import LocatedMessageGenerator
 from xtr_scheduler.messenger.scheduler_transport import SchedulerTransport
@@ -24,6 +21,7 @@ from .scheduler_config import SchedulerConfig
 if TYPE_CHECKING:
     from collections.abc import Callable, Coroutine
 
+    from xtr_clock import ClockInterface
     from xtr_dependency_injection import ContainerBuilder
 
     from ._declared import Declared
@@ -44,11 +42,16 @@ class AddScheduleMessengerPass:
     to it: that is how an application overrides one.
     """
 
-    __slots__ = ("_declared",)
+    __slots__ = ("_clock", "_declared")
 
-    def __init__(self, declared: Declared) -> None:
-        """Register receivers for what ``declared`` holds."""
+    def __init__(
+        self,
+        declared: Declared,
+        clock: Callable[[], Coroutine[None, None, ClockInterface | None]],
+    ) -> None:
+        """Register receivers for what ``declared`` holds; their clock from ``clock``."""
         self._declared = declared
+        self._clock = clock
 
     def process(self, builder: ContainerBuilder) -> None:
         """Register a receiver per schedule, unless one is already there."""
@@ -62,7 +65,10 @@ class AddScheduleMessengerPass:
                 continue
             definition = Definition(
                 (SchedulerTransport, transport),
-                named_factory(_transport_factory(name, transport), f"scheduler_transport_{name}"),
+                named_factory(
+                    _transport_factory(name, transport, self._clock),
+                    f"scheduler_transport_{name}",
+                ),
                 "factory",
                 "singleton",
                 _ORIGIN,
@@ -71,16 +77,17 @@ class AddScheduleMessengerPass:
 
 
 def _transport_factory(
-    name: str, transport: str
+    name: str,
+    transport: str,
+    clock_source: Callable[[], Coroutine[None, None, ClockInterface | None]],
 ) -> Callable[..., Coroutine[None, None, SchedulerTransport]]:
     """Return a factory building the transport ``transport`` for the schedule ``name``."""
 
     async def build(
         schedules: ScheduleProviderLocator,
         config: SchedulerConfig,
-        container: ContainerInterface,
     ) -> SchedulerTransport:
-        clock = await optional_service(container, ClockInterface)
+        clock = await clock_source()
         return SchedulerTransport(
             LocatedMessageGenerator(schedules, name, clock),
             name=transport,

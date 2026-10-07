@@ -1,12 +1,19 @@
-"""Schedule providers and task targets, built by a container when first asked for."""
+"""Schedule providers and task targets, resolved through locators, never the container.
+
+A schedule provider is a service the container builds; a class task target is
+too. Both are reached by name through a
+:class:`~xtr_dependency_injection.ServiceLocator` the bundle builds once it has
+its container — a lazy, name-keyed view that builds each entry only when it is
+asked for. A function task target is not a service: the bundle binds it to the
+container ahead of time and hands the bound callables over by name.
+"""
 
 from __future__ import annotations
 
 from types import MappingProxyType
-from typing import TYPE_CHECKING, cast, final
+from typing import TYPE_CHECKING, final
 
 from typing_extensions import override
-from xtr_dependency_injection import bind_callable
 from xtr_service_contracts import ServiceProviderInterface
 
 from xtr_scheduler.exception import InvalidArgumentError
@@ -16,7 +23,7 @@ from xtr_scheduler.schedule import Schedule
 if TYPE_CHECKING:
     from collections.abc import Callable, Hashable, Mapping
 
-    from xtr_service_contracts import ContainerInterface
+    from xtr_dependency_injection import ServiceLocator
 
     from xtr_scheduler.schedule_provider_interface import ScheduleProviderInterface
 
@@ -33,11 +40,13 @@ class ContainerSchedules(ServiceProviderInterface["ScheduleProviderInterface"]):
     announcing its runs must see the same schedule, listeners and all.
     """
 
-    __slots__ = ("_built", "_container", "_declared")
+    __slots__ = ("_built", "_declared", "_providers")
 
-    def __init__(self, container: ContainerInterface, declared: Declared) -> None:
-        """Build the schedules ``declared`` names, from ``container``."""
-        self._container = container
+    def __init__(
+        self, providers: ServiceLocator[ScheduleProviderInterface], declared: Declared
+    ) -> None:
+        """Build the schedules ``declared`` names, their providers from ``providers``."""
+        self._providers = providers
         self._declared = declared
         self._built: dict[str, ScheduleProviderInterface] = {}
 
@@ -55,12 +64,11 @@ class ContainerSchedules(ServiceProviderInterface["ScheduleProviderInterface"]):
         if not self.has(key):
             raise InvalidArgumentError(f'The schedule "{key}" is not found.')
         tasks = self._declared.recurring_messages(key)
-        provider_class = self._declared.providers.get(key)
-        if provider_class is None:
-            built = Schedule(*tasks)
-        else:
-            inner = cast("ScheduleProviderInterface", await self._container.get(provider_class))
+        if key in self._declared.providers:
+            inner = await self._providers.get(key)
             built = ScheduleWithTasks(inner, tasks) if tasks else inner
+        else:
+            built = Schedule(*tasks)
         self._built[key] = built
         return built
 
@@ -77,15 +85,20 @@ class ContainerSchedules(ServiceProviderInterface["ScheduleProviderInterface"]):
 
 @final
 class ContainerTargets(ServiceProviderInterface[object]):
-    """Each task target: a class built by the container, a function with its services bound."""
+    """Each task target: a class built by the container, a function bound to it."""
 
-    __slots__ = ("_bound", "_container", "_declared")
+    __slots__ = ("_classes", "_declared", "_functions")
 
-    def __init__(self, container: ContainerInterface, declared: Declared) -> None:
-        """Hand over the targets ``declared`` names, from ``container``."""
-        self._container = container
+    def __init__(
+        self,
+        classes: ServiceLocator[object],
+        functions: Mapping[str, Callable[..., object]],
+        declared: Declared,
+    ) -> None:
+        """Hand over the class targets in ``classes`` and the bound ``functions``, by name."""
+        self._classes = classes
+        self._functions = functions
         self._declared = declared
-        self._bound: dict[str, Callable[..., object]] = {}
 
     @override
     async def get(self, name: Hashable, /) -> object:
@@ -95,28 +108,22 @@ class ContainerTargets(ServiceProviderInterface[object]):
             InvalidArgumentError: If no such target was declared.
         """
         key = str(name)
-        target_class = self._declared.task_classes.get(key)
-        if target_class is not None:
-            return await self._container.get(target_class)
-        function = self._declared.functions.get(key)
-        if function is None:
-            raise InvalidArgumentError(f'The task "{key}" is not found.')
-        bound = self._bound.get(key)
+        if self._classes.has(key):
+            return await self._classes.get(key)
+        bound = self._functions.get(key)
         if bound is None:
-            bound = bind_callable(self._container, cast("Callable[..., object]", function))
-            self._bound[key] = bound
+            raise InvalidArgumentError(f'The task "{key}" is not found.')
         return bound
 
     @override
     def has(self, name: Hashable, /) -> bool:
         key = str(name)
-        return key in self._declared.task_classes or key in self._declared.functions
+        return self._classes.has(key) or key in self._functions
 
     @override
     def provided_services(self) -> Mapping[Hashable, type[object]]:
-        functions = self._declared.functions.items()
-        entries: list[tuple[Hashable, type[object]]] = [
-            *self._declared.task_classes.items(),
-            *((name, type(function)) for name, function in functions),
-        ]
-        return MappingProxyType(dict(entries))
+        entries: dict[Hashable, type[object]] = {
+            **self._declared.task_classes,
+            **{name: type(function) for name, function in self._declared.functions.items()},
+        }
+        return MappingProxyType(entries)

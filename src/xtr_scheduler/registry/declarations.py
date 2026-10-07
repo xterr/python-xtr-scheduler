@@ -59,7 +59,20 @@ def declare_schedule(provider: type, name: str) -> None:
 
 
 def declare_task(target: object, declaration: TaskDeclaration) -> None:
-    """Record ``declaration`` as a task calling ``target``."""
+    """Record ``declaration`` as a task calling ``target``.
+
+    Raises:
+        SchedulerLogicError: If the task names a private method. A call
+            crossing a transport from another worker may reach only a method a
+            decorator declared, never a private or dunder name — so a task
+            declared on one is refused where it is written, not accepted here
+            and refused on every run.
+    """
+    method = declaration.method
+    if method is not None and method != "__call__" and method.startswith("_"):
+        raise SchedulerLogicError(
+            f'The task "{task_name(target)}" declares the private method "{method}".'
+        )
     _TASKS.append((target, declaration))
     _append(target, TASKS_ATTRIBUTE, declaration)
 

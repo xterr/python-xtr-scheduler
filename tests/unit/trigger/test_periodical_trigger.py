@@ -146,6 +146,12 @@ def test_the_end_is_exclusive_to_the_microsecond() -> None:
     assert trigger.get_next_run_date(at("2020-02-20T03:00:00Z")) is None
 
 
+def test_no_run_at_or_after_the_end_even_when_the_start_is_still_ahead() -> None:
+    trigger = PeriodicalTrigger(3600, "2020-06-01T10:00:00Z", "2020-06-01T09:00:00Z")
+
+    assert trigger.get_next_run_date(at("2020-06-01T08:00:00Z")) is None
+
+
 def test_without_a_start_the_first_run_it_is_asked_about_anchors_it() -> None:
     trigger = PeriodicalTrigger(60)
 
@@ -254,3 +260,22 @@ def test_a_daily_run_at_a_skipped_hour_is_labelled_with_the_hour_that_replaced_i
 
     assert skipped is not None
     assert skipped.isoformat() == "2026-03-29T04:30:00+03:00"
+
+
+def test_a_start_in_the_repeated_hour_is_the_second_pass_not_the_first() -> None:
+    """Europe/Bucharest repeats 03:00-04:00 on 2026-10-25; fold=1 is the later instant.
+
+    A start anchored to the second pass (fold=1, the lower offset) must not be
+    answered with the first-pass instant: the two share a wall clock but are an
+    hour apart, and comparing them on the zone's wall clock — which ignores
+    fold — would pick the earlier one.
+    """
+    bucharest = ZoneInfo("Europe/Bucharest")
+    start = datetime(2026, 10, 25, 3, 30, tzinfo=bucharest, fold=1)
+    trigger = PeriodicalTrigger(600, start, datetime(2026, 10, 25, 6, tzinfo=bucharest))
+
+    first_run = trigger.get_next_run_date(datetime(2026, 10, 25, 3, 20, tzinfo=bucharest))
+
+    assert first_run is not None
+    assert first_run.timestamp() == start.timestamp()
+    assert first_run.utcoffset() == timedelta(hours=2)

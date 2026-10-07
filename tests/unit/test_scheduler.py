@@ -2,17 +2,24 @@
 
 from __future__ import annotations
 
-from typing import final
+from typing import TYPE_CHECKING, Self, final
 
 import pytest
-from xtr_clock import MockClock
+from typing_extensions import override
+from xtr_clock import ClockInterface, MockClock
 from xtr_event_dispatcher import EventDispatcher
 from xtr_lock import InMemoryStore, Key, Lock
 
-from tests.support.messages import Named
+from tests.support.messages import Named, Plain
 from xtr_scheduler import RecurringMessage, Schedule
 from xtr_scheduler.event import FailureEvent, PostRunEvent, PreRunEvent
+from xtr_scheduler.exception import InvalidArgumentError
 from xtr_scheduler.scheduler import Scheduler
+
+if TYPE_CHECKING:
+    from datetime import tzinfo
+
+    from xtr_clock import DatePoint
 
 pytestmark = pytest.mark.anyio
 
@@ -143,3 +150,54 @@ async def test_a_run_hands_the_schedules_lock_back_when_it_returns() -> None:
     await scheduler.run()
 
     assert not await lock.is_acquired()
+
+
+async def test_a_message_type_with_no_handler_is_refused_naming_the_registered_ones() -> None:
+    clock = MockClock(START)
+    scheduler = Scheduler({Named: Handler(1)}, [every_minute(Plain())], clock)
+
+    with pytest.raises(InvalidArgumentError, match=r"No handler is registered for .Plain.*Named"):
+        await scheduler.run()
+
+
+async def test_the_sleep_between_polls_is_never_negative() -> None:
+    slow = SlowClock(START)
+    scheduler = Scheduler({Named: Handler(1)}, [], slow)
+    slow.scheduler = scheduler
+
+    await scheduler.run(sleep=1.0)
+
+    assert slow.slept == [0.0]
+
+
+@final
+class SlowClock(ClockInterface):
+    """A clock whose second reading jumps past a poll interval, recording what it sleeps."""
+
+    def __init__(self, start: str) -> None:
+        self._mock = MockClock(start)
+        self.slept: list[float] = []
+        self.scheduler: Scheduler | None = None
+        self._reads = 0
+
+    @override
+    def now(self) -> DatePoint:
+        self._reads += 1
+        if self._reads > 1:
+            self._mock.sleep(5)
+        return self._mock.now()
+
+    @override
+    def sleep(self, seconds: float) -> None:
+        self._mock.sleep(seconds)
+
+    @override
+    async def sleep_async(self, seconds: float) -> None:
+        self.slept.append(seconds)
+        if self.scheduler is not None:
+            self.scheduler.stop()
+
+    @override
+    def with_timezone(self, timezone: str | tzinfo) -> Self:
+        del timezone
+        return self

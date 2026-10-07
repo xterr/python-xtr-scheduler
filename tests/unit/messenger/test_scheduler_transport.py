@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import aclosing
+from datetime import datetime
 
 import pytest
 from xtr_clock import MockClock
@@ -50,6 +51,30 @@ async def test_nothing_due_waits_a_poll_interval_on_the_clock_and_asks_again() -
     assert envelope.message == Named("late")
     assert generator.calls == 3
     assert clock.now().isoformat() == "2026-01-01T00:00:10+00:00"
+
+
+async def test_it_waits_only_until_the_next_run_when_that_is_sooner_than_a_poll() -> None:
+    clock = MockClock("2026-01-01T00:00:00+00:00")
+    generator = ListedGenerator([], [(a_context(), Named("soon"))])
+    generator.next_due = datetime.fromisoformat("2026-01-01T00:00:02+00:00")
+    transport = SchedulerTransport(generator, clock=clock, poll_interval=60)
+
+    [envelope] = await first(transport, 1)
+
+    assert envelope.message == Named("soon")
+    assert clock.now().isoformat() == "2026-01-01T00:00:02+00:00"
+
+
+async def test_a_next_run_already_past_waits_a_whole_poll_interval() -> None:
+    clock = MockClock("2026-01-01T00:00:00+00:00")
+    generator = ListedGenerator([], [(a_context(), Named("standby"))])
+    generator.next_due = datetime.fromisoformat("2025-12-31T23:00:00+00:00")
+    transport = SchedulerTransport(generator, clock=clock, poll_interval=5)
+
+    [envelope] = await first(transport, 1)
+
+    assert envelope.message == Named("standby")
+    assert clock.now().isoformat() == "2026-01-01T00:00:05+00:00"
 
 
 async def test_a_redispatch_carries_the_stamp_on_the_envelope_it_sends_on() -> None:

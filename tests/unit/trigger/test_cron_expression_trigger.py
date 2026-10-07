@@ -61,6 +61,17 @@ def test_a_hashed_expression_needs_a_context() -> None:
         _ = CronExpressionTrigger.from_expression("# * * * *")
 
 
+def test_a_hashed_range_with_reversed_bounds_is_refused() -> None:
+    with pytest.raises(InvalidArgumentError, match="bounds reversed"):
+        _ = CronExpressionTrigger.from_expression("#(5-0) * * * *", "my task")
+
+
+def test_a_hashed_expression_with_extra_spaces_is_read() -> None:
+    picked = CronExpressionTrigger.from_expression("#  #  *  *  *", "my task")
+
+    assert str(picked) == str(CronExpressionTrigger.from_expression("# # * * *", "my task"))
+
+
 def test_an_expression_without_hashing_is_kept_as_written() -> None:
     assert (
         str(CronExpressionTrigger.from_expression("56 20 1 9 0", "some context")) == "56 20 1 9 0"

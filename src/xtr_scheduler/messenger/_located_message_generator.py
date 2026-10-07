@@ -7,11 +7,13 @@ from typing import TYPE_CHECKING, final
 
 from typing_extensions import override
 
+from xtr_scheduler._time import EPOCH
 from xtr_scheduler.generator.message_generator import MessageGenerator
 from xtr_scheduler.generator.message_generator_interface import MessageGeneratorInterface
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
+    from datetime import datetime
 
     from xtr_clock import ClockInterface
 
@@ -44,6 +46,12 @@ class LocatedMessageGenerator(MessageGeneratorInterface):
         self._name = name
         self._clock = clock
         self._generator: MessageGenerator | None = None
+
+    @property
+    @override
+    def wait_until(self) -> datetime | None:
+        """Return when the next run is due; the epoch until the schedule is looked up."""
+        return EPOCH if self._generator is None else self._generator.wait_until
 
     @override
     async def get_messages(self) -> AsyncGenerator[tuple[MessageContext, object]]:

@@ -14,7 +14,7 @@ their state in.
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import TYPE_CHECKING, Final, final
+from typing import TYPE_CHECKING, Final, cast, final
 
 from typing_extensions import override
 from xtr_clock import ClockInterface
@@ -23,7 +23,9 @@ from xtr_dependency_injection import (
     ContainerBuilder,
     PassStage,
     ServiceConfigurator,
+    ServiceLocator,
     as_bundle,
+    bind_callable,
     bundle_active,
     named_factory,
     optional_service,
@@ -31,14 +33,16 @@ from xtr_dependency_injection import (
 )
 from xtr_messenger import TransportFactoryInterface
 from xtr_messenger.bundle import TRANSPORT_FACTORY_TAG, MessengerBundle
-from xtr_service_contracts import ContainerInterface
 
 from xtr_scheduler.event_listener.dispatch_scheduler_event_listener import (
     DispatchSchedulerEventListener,
 )
+from xtr_scheduler.exception import SchedulerLogicError
 from xtr_scheduler.messenger.scheduler_transport_factory import SchedulerTransportFactory
 from xtr_scheduler.messenger.task_locator import TaskLocator
+from xtr_scheduler.messenger.task_methods import TaskMethods
 from xtr_scheduler.registry.declarations import schedules_declared_on, tasks_declared_on
+from xtr_scheduler.schedule_provider_interface import ScheduleProviderInterface
 from xtr_scheduler.schedule_provider_locator import ScheduleProviderLocator
 
 from ._add_schedule_messenger_pass import AddScheduleMessengerPass
@@ -54,6 +58,8 @@ if TYPE_CHECKING:
 __all__ = ["SCHEDULER_POOL", "SchedulerBundle"]
 
 _TRANSPORT_FACTORY: str = "xtr_scheduler.schedule"
+
+_NO_CONTAINER: Final = "the scheduler bundle has no container; it is used before it booted"
 
 SCHEDULER_POOL: Final = "scheduler"
 """The cache pool added for schedules' saved state, when the cache bundle is active."""
@@ -128,7 +134,9 @@ class SchedulerBundle(Bundle[SchedulerConfig]):
         builder.register_attribute_for_autoconfiguration(schedules_declared_on, register_schedule)
         builder.register_attribute_for_autoconfiguration(tasks_declared_on, register_task)
         builder.add_compiler_pass(
-            AddScheduleMessengerPass(declared), stage=PassStage.BEFORE_OPTIMIZATION, priority=0
+            AddScheduleMessengerPass(declared, self._resolve_clock),
+            stage=PassStage.BEFORE_OPTIMIZATION,
+            priority=0,
         )
 
     @override
@@ -140,12 +148,14 @@ class SchedulerBundle(Bundle[SchedulerConfig]):
     ) -> None:
         """Register the locators, and what the active peers can use them for."""
         del config
-        _ = services.set(named_factory(_schedule_locator(self._declared), "scheduler_schedules"))
-        _ = services.set(named_factory(_task_locator(self._declared), "scheduler_tasks"))
+        declared = self._declared
+        _ = services.set(named_factory(_schedule_locator(self, declared), "scheduler_schedules"))
+        _ = services.set(named_factory(_task_locator(self, declared), "scheduler_tasks"))
+        _ = services.set(named_factory(_task_methods(declared), "scheduler_task_methods"))
         services.load("xtr_scheduler.messenger.service_call_message_handler")
-        _ = services.set(_scheduler_transport_factory, qualifier=_TRANSPORT_FACTORY).add_tag(
-            TRANSPORT_FACTORY_TAG
-        )
+        _ = services.set(
+            _scheduler_transport_factory(self._resolve_clock), qualifier=_TRANSPORT_FACTORY
+        ).add_tag(TRANSPORT_FACTORY_TAG)
         services.alias(
             TransportFactoryInterface,
             SchedulerTransportFactory,
@@ -157,33 +167,73 @@ class SchedulerBundle(Bundle[SchedulerConfig]):
         if bundle_active(builder, "console"):
             services.load("xtr_scheduler.command")
 
+    async def _resolve_clock(self) -> ClockInterface | None:
+        """Return the container's clock, or ``None`` when no clock bundle is active."""
+        container = self.container
+        if container is None:
+            raise SchedulerLogicError(_NO_CONTAINER)
+        return await optional_service(container, ClockInterface)
+
 
 def _schedule_locator(
-    declared: Declared,
-) -> Callable[[ContainerInterface], Coroutine[None, None, ScheduleProviderLocator]]:
-    async def build(container: ContainerInterface) -> ScheduleProviderLocator:
-        return ScheduleProviderLocator(ContainerSchedules(container, declared))
+    bundle: SchedulerBundle, declared: Declared
+) -> Callable[[], Coroutine[None, None, ScheduleProviderLocator]]:
+    """Return a factory serving the container's schedules through a :class:`ServiceLocator`."""
+
+    async def build() -> ScheduleProviderLocator:
+        container = bundle.container
+        if container is None:
+            raise SchedulerLogicError(_NO_CONTAINER)
+        providers = ServiceLocator[ScheduleProviderInterface](
+            container, {name: (cls, None) for name, cls in declared.providers.items()}
+        )
+        return ScheduleProviderLocator(ContainerSchedules(providers, declared))
 
     return build
 
 
 def _task_locator(
-    declared: Declared,
-) -> Callable[[ContainerInterface], Coroutine[None, None, TaskLocator]]:
-    async def build(container: ContainerInterface) -> TaskLocator:
-        return TaskLocator(ContainerTargets(container, declared))
+    bundle: SchedulerBundle, declared: Declared
+) -> Callable[[], Coroutine[None, None, TaskLocator]]:
+    """Return a factory serving the task targets: classes by locator, functions bound."""
+
+    async def build() -> TaskLocator:
+        container = bundle.container
+        if container is None:
+            raise SchedulerLogicError(_NO_CONTAINER)
+        classes = ServiceLocator[object](
+            container, {name: (cls, None) for name, cls in declared.task_classes.items()}
+        )
+        functions = {
+            name: bind_callable(container, cast("Callable[..., object]", function))
+            for name, function in declared.functions.items()
+        }
+        return TaskLocator(ContainerTargets(classes, functions, declared))
 
     return build
 
 
-async def _scheduler_transport_factory(
-    schedules: ScheduleProviderLocator,
-    config: SchedulerConfig,
-    container: ContainerInterface,
-) -> SchedulerTransportFactory:
-    """Serve ``schedule://`` DSNs an application configures, from the container's schedules."""
-    return SchedulerTransportFactory(
-        schedules,
-        clock=await optional_service(container, ClockInterface),
-        use_messenger_routing=config.use_messenger_routing,
-    )
+def _task_methods(declared: Declared) -> Callable[[], TaskMethods]:
+    """Return a factory building the method allow-list from the kernel's declarations."""
+
+    def build() -> TaskMethods:
+        return TaskMethods(declared.task_methods())
+
+    return build
+
+
+def _scheduler_transport_factory(
+    clock_source: Callable[[], Coroutine[None, None, ClockInterface | None]],
+) -> Callable[..., Coroutine[None, None, SchedulerTransportFactory]]:
+    """Return a factory building the ``schedule://`` transport factory, clock and all."""
+
+    async def build(
+        schedules: ScheduleProviderLocator, config: SchedulerConfig
+    ) -> SchedulerTransportFactory:
+        return SchedulerTransportFactory(
+            schedules,
+            clock=await clock_source(),
+            use_messenger_routing=config.use_messenger_routing,
+        )
+
+    return build

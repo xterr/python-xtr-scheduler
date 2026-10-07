@@ -29,7 +29,12 @@ if TYPE_CHECKING:
 
     from .task_declaration import TaskDeclaration
 
-__all__ = ["declared_schedules", "declared_task_targets", "schedule_of"]
+__all__ = [
+    "declared_schedules",
+    "declared_task_methods",
+    "declared_task_targets",
+    "schedule_of",
+]
 
 
 def schedule_of(
@@ -60,6 +65,19 @@ def declared_schedules() -> ScheduleProviderLocator:
 def declared_task_targets() -> TaskLocator:
     """Return the task targets declared in this process, each class built when first called."""
     return TaskLocator(_DeclaredTargets())
+
+
+def declared_task_methods() -> dict[str, frozenset[str]]:
+    """Return the methods each task target was declared to be called through, by target name.
+
+    A target declared with no ``method`` is called through ``__call__``. The
+    handler calls a target through nothing else, so a crafted message cannot
+    reach a method no decorator named.
+    """
+    methods: dict[str, set[str]] = {}
+    for target, declaration in declared_tasks():
+        methods.setdefault(task_name(target), set()).add(declaration.method or "__call__")
+    return {name: frozenset(allowed) for name, allowed in methods.items()}
 
 
 @final

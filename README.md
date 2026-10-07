@@ -24,8 +24,9 @@ A schedule here is a set of **recurring messages** — a message and when to sen
 worker consumes it like any other transport: each message is handled there, or sent on to
 wherever routing puts it — a RabbitMQ queue and its worker pool, say.
 
-- ⏱️ **Nothing is sent twice, nothing is lost** — every message is recorded as sent before the
-  next is produced; a restarted worker resumes exactly where the last one stopped.
+- ⏱️ **At least once, in order** — every message is recorded as sent before the next is produced,
+  so in the ordinary course nothing goes twice and a restarted worker resumes where the last one
+  stopped; a crash between sending a run and recording it sends that run again.
 - 🔁 **Catch-up** — after downtime every missed run is sent, oldest first, or only the latest
   of each when the schedule asks.
 - 🔒 **One sender** — give a schedule an [xtr-lock](../xtr-lock) lock and only the process
@@ -191,8 +192,11 @@ schedule is consumed. Stack the decorators for several runs.
 
 `@as_schedule("name")` declares a class providing a whole schedule; tasks on the same name join it.
 
-Without a container, `schedule://<name>` serves the declared schedules as discovery finds the
-transport — every class is built with no arguments.
+Without a container, `schedule://<name>` still serves the declared schedules as discovery finds
+the transport, each provider built with no arguments. Handling a run is separate: the
+`ServiceCallMessageHandler` takes its task targets and its per-target method allow-list as
+required arguments, so without a container the caller wires it — `ServiceCallMessageHandler(
+declared_task_targets(), TaskMethods(declared_task_methods()))` — rather than it building bare.
 
 ## Use in an application
 

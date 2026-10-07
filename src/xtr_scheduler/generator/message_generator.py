@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 
     from xtr_clock import ClockInterface
 
+    from xtr_scheduler.recurring_message import RecurringMessage
     from xtr_scheduler.schedule import Schedule
     from xtr_scheduler.schedule_provider_interface import ScheduleProviderInterface
     from xtr_scheduler.trigger.trigger_interface import TriggerInterface
@@ -36,14 +37,17 @@ _ONE_MICROSECOND: Final = timedelta(microseconds=1)
 
 @final
 class MessageGenerator(MessageGeneratorInterface):
-    """Turns a schedule into the messages that are due, each exactly once.
+    """Turns a schedule into the messages that are due, at least once each.
 
     Each call to :meth:`get_messages` yields everything due since the last
     one — after downtime, every run that was missed, oldest first, unless the
     schedule asks for only the latest of each. A checkpoint records each
-    message as it is sent, so a run is never sent twice: not by this
-    generator, not after a restart when the schedule keeps its state, and not
-    by another process when the schedule runs under a lock.
+    message once sent, so in the ordinary course a run goes once: not twice by
+    this generator, nor again after a restart when the schedule keeps its
+    state, nor by another process when the schedule runs under a lock. A run
+    recorded after it is handed on, though, means delivery is at least once,
+    not exactly once: a crash between sending a message and recording it
+    sends that run again on the next pass.
 
     Between due runs a call returns at once without touching the lock or the
     cache: :attr:`wait_until` says when the next run is due.
@@ -94,11 +98,7 @@ class MessageGenerator(MessageGeneratorInterface):
         return self._schedule
 
     @property
-    def schedule_provider(self) -> ScheduleProviderInterface:
-        """Return what hands over the schedule."""
-        return self._provider
-
-    @property
+    @override
     def wait_until(self) -> datetime | None:
         """Return when the next run is due; ``None`` once nothing will ever be due again."""
         return self._wait_until
@@ -126,12 +126,12 @@ class MessageGenerator(MessageGeneratorInterface):
         if microseconds(self._wait_until) > now_at or not await checkpoint.acquire(now):
             return
 
-        last_time = checkpoint.time()
-        last_index = checkpoint.index()
-        heap = self._heap_for(last_time, checkpoint.from_(), last_index)
-
-        last_at = microseconds(last_time)
+        heap: TriggerHeap | None = None
         try:
+            last_time = checkpoint.time()
+            last_index = checkpoint.index()
+            heap = self._heap_for(last_time, checkpoint.from_(), last_index)
+            last_at = microseconds(last_time)
             while heap and microseconds(heap.top()[0]) <= now_at:
                 time, index, recurring_message = heap.extract()
                 time_at = microseconds(time)
@@ -139,29 +139,36 @@ class MessageGenerator(MessageGeneratorInterface):
                 send = time_at > last_at or (time_at == last_at and index > last_index)
                 time = time if time_at >= last_at else last_time
                 trigger = recurring_message.get_trigger()
-                if send and self.schedule.should_process_only_last_missed_run():
-                    latest = self._latest_due(trigger, time, now_at)
-                    if latest is not time:
-                        # Sent when its turn comes, so what is recorded as sent
-                        # never moves backwards.
-                        heap.insert(latest, index, recurring_message)
-                        continue
+                entry = (time, index, recurring_message)
+                if send and self._reschedule_to_latest(heap, entry, now_at):
+                    continue
                 next_time = self._next_time(trigger, time)
                 if next_time is not None:
                     heap.insert(next_time, index, recurring_message)
                 if not send:
                     continue
                 context = MessageContext(self._name, recurring_message.id, trigger, time, next_time)
+                # Record the run only once at least one of its messages was
+                # handed on: a provider that raises or is cancelled before
+                # yielding leaves the checkpoint untouched, so the next pass
+                # runs it again — delivery is at least once, never zero.
+                started = False
                 try:
                     async for message in recurring_message.get_messages(context):
+                        started = True
                         yield context, message
                 finally:
-                    await checkpoint.save(time, index)
+                    if started:
+                        await checkpoint.save(time, index)
         finally:
-            # Iteration stopped early is still a run that ended: say what is due next,
-            # and keep the lock until then.
-            self._wait_until = heap.top()[0] if heap else None
-            await checkpoint.release(now, self._wait_until)
+            # A run that ended — iteration stopped early, or building the plan
+            # failed — still hands the lock back. With a plan, say what is due
+            # next and keep the lock until then; a failure before one leaves the
+            # next due time as it was, to try again, and hands the lock back now.
+            next_time = heap.top()[0] if heap else None
+            if heap is not None:
+                self._wait_until = next_time
+            await checkpoint.release(now, next_time)
 
     @override
     async def close(self) -> None:
@@ -228,6 +235,27 @@ class MessageGenerator(MessageGeneratorInterface):
                 heap.insert(next_time, index, recurring_message)
         self._heap = heap
         return heap
+
+    def _reschedule_to_latest(
+        self,
+        heap: TriggerHeap,
+        entry: tuple[datetime, int, RecurringMessage],
+        now_at: int,
+    ) -> bool:
+        """Skip a missed run to its latest due instant when the schedule asks only for that.
+
+        Returns ``True`` when the run was put back on the heap at a later
+        instant — sent when its turn comes, so what is recorded as sent never
+        moves backwards — and the caller should move on.
+        """
+        if not self.schedule.should_process_only_last_missed_run():
+            return False
+        time, index, recurring_message = entry
+        latest = self._latest_due(recurring_message.get_trigger(), time, now_at)
+        if latest is time:
+            return False
+        heap.insert(latest, index, recurring_message)
+        return True
 
     def _checkpoint_of_schedule(self) -> CheckpointInterface:
         if self._checkpoint is None:

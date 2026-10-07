@@ -10,6 +10,7 @@ from xtr_scheduler.generator import MessageContext, MessageGeneratorInterface
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
+    from datetime import datetime
 
 
 @final
@@ -20,6 +21,12 @@ class ListedGenerator(MessageGeneratorInterface):
         self._batches = list(batches)
         self.calls = 0
         self.closed = False
+        self.next_due: datetime | None = None
+
+    @property
+    @override
+    def wait_until(self) -> datetime | None:
+        return self.next_due
 
     @override
     async def get_messages(self) -> AsyncGenerator[tuple[MessageContext, object]]:

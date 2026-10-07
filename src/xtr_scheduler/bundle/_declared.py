@@ -73,3 +73,16 @@ class Declared:
             for target, declaration in self.tasks
             if declaration.schedule == schedule
         ]
+
+    def task_methods(self) -> dict[str, frozenset[str]]:
+        """Return the methods each task target may be called through, by target name.
+
+        Built from this kernel's own declarations, so the handler refuses any
+        method no decorator named here — the allow-list is the container's,
+        never a process-wide registry's. A task declared with no ``method`` is
+        called through ``__call__``.
+        """
+        methods: dict[str, set[str]] = {}
+        for name, declaration in self.tasks:
+            methods.setdefault(name, set()).add(declaration.method or "__call__")
+        return {name: frozenset(allowed) for name, allowed in methods.items()}

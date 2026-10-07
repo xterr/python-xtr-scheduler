@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Annotated, ClassVar, Final, final
+from typing import Annotated, final
 
 from xtr_cache_contracts import CacheItemPoolInterface
 from xtr_clock import DatePoint, now, shift_calendar
@@ -16,9 +16,6 @@ from xtr_scheduler.schedule_provider_locator import ScheduleProviderLocator
 
 __all__ = ["DebugCommand"]
 
-#: Stands for "no schedules given": ``use_schedules()`` or the declared ones are used.
-_UNSET: Final = ScheduleProviderLocator({})
-
 _Row = tuple[str, str, datetime | None]
 
 
@@ -27,23 +24,15 @@ _Row = tuple[str, str, datetime | None]
 class DebugCommand:
     """Lists schedules and their recurring messages, with when each runs next.
 
-    A container builds it with the schedules its bundle wired; without one it
-    reads those given to :meth:`use_schedules`, or else the ones declared in
-    this process.
+    A container builds it with the schedules its bundle wired. Without one the
+    console reports the missing ``schedules`` parameter: it needs a container.
     """
 
     __slots__ = ("_schedules",)
 
-    _process_schedules: ClassVar[ScheduleProviderLocator | None] = None
-
-    def __init__(self, schedules: ScheduleProviderLocator = _UNSET) -> None:
-        """List ``schedules``, or those set with :meth:`use_schedules` when omitted."""
+    def __init__(self, schedules: ScheduleProviderLocator) -> None:
+        """List the schedules in ``schedules``."""
         self._schedules = schedules
-
-    @classmethod
-    def use_schedules(cls, schedules: ScheduleProviderLocator | None) -> None:
-        """List ``schedules`` wherever no container supplies any."""
-        cls._process_schedules = schedules
 
     async def __call__(
         self,
@@ -69,7 +58,7 @@ class DebugCommand:
                 never run again come first.
         """
         io.title("Scheduler")
-        schedules = self._resolved()
+        schedules = self._schedules
         names = schedule or schedules.names()
         if not names:
             io.error("No schedules found.")
@@ -125,22 +114,11 @@ class DebugCommand:
                     escape(trigger),
                     escape(provider),
                     next_run.isoformat() if next_run is not None else "-",
-                    format_interval(reference, next_run) if next_run is not None else "-",
+                    _format_interval(reference, next_run) if next_run is not None else "-",
                 ]
                 for trigger, provider, next_run in rows
             ],
         )
-
-    def _resolved(self) -> ScheduleProviderLocator:
-        if self._schedules is not _UNSET:
-            return self._schedules
-        if self._process_schedules is not None:
-            return self._process_schedules
-        from xtr_scheduler.registry.declared_schedules import (  # noqa: PLC0415 — declarations are read when first needed
-            declared_schedules,
-        )
-
-        return declared_schedules()
 
 
 def _row(message: RecurringMessage, base: datetime) -> _Row:
@@ -166,7 +144,7 @@ async def _checkpoint_time(schedule: Schedule, name: str) -> datetime | None:
     return None
 
 
-def format_interval(start: datetime, end: datetime) -> str:
+def _format_interval(start: datetime, end: datetime) -> str:
     """Describe how long from ``start`` to ``end`` — ``-`` first when ``end`` is past.
 
     In years, months, days, hours and minutes, then seconds to the

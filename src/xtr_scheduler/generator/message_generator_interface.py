@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
+    from datetime import datetime
 
     from .message_context import MessageContext
 
@@ -15,6 +16,15 @@ __all__ = ["MessageGeneratorInterface"]
 @runtime_checkable
 class MessageGeneratorInterface(Protocol):
     """Produces the messages that are due, each with the run it belongs to."""
+
+    @property
+    def wait_until(self) -> datetime | None:
+        """Return when the next run is due; ``None`` once nothing will ever be due again.
+
+        A caller with nothing due need wait no longer than this before asking
+        again, so a run is not held back by a fixed poll interval.
+        """
+        ...
 
     def get_messages(self) -> AsyncGenerator[tuple[MessageContext, object]]:
         """Yield every message due by now, then stop.

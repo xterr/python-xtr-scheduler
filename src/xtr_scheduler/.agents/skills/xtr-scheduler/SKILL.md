@@ -140,7 +140,9 @@ class AppSchedule(ScheduleProviderInterface):
 | **No lock** | Every process sends every run; a restart starts from now | Every process sends; a restart resumes |
 | **With `.lock(lock)`** | One process sends; another taking over starts from now | One process sends; another taking over resumes |
 
-- Every message is recorded as sent before the next is produced, so nothing goes twice.
+- Every message is recorded as sent before the next is produced, so in the ordinary course
+  nothing goes twice; delivery is at least once, though — a crash between sending a run and
+  recording it sends that run again on the next pass.
 - After downtime every missed run is sent oldest first, unless
   `.process_only_last_missed_run()` asks for the latest of each.
 - The lock is kept between runs. A worker stopping gives it back at once; one that crashes leaves

@@ -2,59 +2,83 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import inspect
+from typing import TYPE_CHECKING, cast, final
 
 import pytest
+from typing_extensions import override
 from xtr_cache.adapter import ArrayAdapter
 from xtr_clock.testing import mock_time
 from xtr_console import Application, CommandTester, ExitCode
+from xtr_console.command import CommandInvokerInterface
+from xtr_console.exception import MissingContainerError
 
 from tests.support.dates import at
 from tests.support.messages import Named
 from xtr_scheduler import RecurringMessage, Schedule
 from xtr_scheduler.command import DebugCommand
-from xtr_scheduler.command.debug_command import format_interval
+from xtr_scheduler.command.debug_command import _format_interval
 from xtr_scheduler.generator import Checkpoint
 from xtr_scheduler.schedule_provider_locator import ScheduleProviderLocator
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable
+
+    from xtr_console.command import CommandArguments, CommandDescriptor, CommandSignature
 
 pytestmark = pytest.mark.anyio
 
 START = "2026-01-01T00:00:00+00:00"
 
 
+@final
+class _BuildWithSchedules(CommandInvokerInterface):
+    """Builds ``DebugCommand`` with the schedules a container would have supplied."""
+
+    def __init__(self, schedules: ScheduleProviderLocator) -> None:
+        self._schedules = schedules
+
+    @override
+    async def invoke(
+        self,
+        command: CommandDescriptor,
+        signature: CommandSignature,
+        arguments: CommandArguments,
+    ) -> object:
+        del command, signature
+        call = cast("Callable[..., object]", DebugCommand(self._schedules))
+        result = call(*arguments.args, **arguments.kwargs)
+        return await result if inspect.isawaitable(result) else result
+
+
 def schedules(**named: Schedule) -> ScheduleProviderLocator:
     return ScheduleProviderLocator(named)
 
 
-@pytest.fixture
-def tester() -> Iterator[CommandTester]:
-    yield CommandTester(Application(catch_exceptions=False), "debug:scheduler")
-    DebugCommand.use_schedules(None)
+def _tester(listed: ScheduleProviderLocator) -> CommandTester:
+    """Build a tester whose invoker hands ``DebugCommand`` the schedules ``listed``."""
+    application = Application(catch_exceptions=False)
+    application.use_invoker(_BuildWithSchedules(listed))
+    return CommandTester(application, "debug:scheduler")
 
 
-async def run(tester: CommandTester, *args: str) -> int:
-    """Run the command with the clock frozen at the start of 2026."""
+async def run(listed: ScheduleProviderLocator, *args: str) -> tuple[int, str]:
+    """Run the command with the clock frozen at the start of 2026; return code and display."""
+    command = _tester(listed)
     with mock_time(START):
-        return await tester.execute(list(args))
+        code = await command.execute(list(args))
+    return code, command.display
 
 
 def every(seconds: int, name: str, until: str = "3000-01-01T00:00:00+00:00") -> RecurringMessage:
     return RecurringMessage.every(seconds, Named(name), from_=START, until=until)
 
 
-async def test_it_lists_each_schedule_with_the_next_run_of_each_message(
-    tester: CommandTester,
-) -> None:
-    DebugCommand.use_schedules(
+async def test_it_lists_each_schedule_with_the_next_run_of_each_message() -> None:
+    code, display = await run(
         schedules(default=Schedule(every(60, "ping")), reports=Schedule(every(3600, "report")))
     )
 
-    code = await run(tester)
-
-    display = tester.display
     assert code == ExitCode.SUCCESS
     assert "default" in display
     assert "reports" in display
@@ -65,84 +89,91 @@ async def test_it_lists_each_schedule_with_the_next_run_of_each_message(
     assert "1 h" in display
 
 
-async def test_only_the_schedules_named_are_listed(tester: CommandTester) -> None:
-    DebugCommand.use_schedules(
-        schedules(default=Schedule(every(60, "ping")), reports=Schedule(every(3600, "report")))
+async def test_only_the_schedules_named_are_listed() -> None:
+    _code, display = await run(
+        schedules(default=Schedule(every(60, "ping")), reports=Schedule(every(3600, "report"))),
+        "reports",
     )
 
-    _ = await run(tester, "reports")
-
-    assert "report" in tester.display
-    assert "ping" not in tester.display
+    assert "report" in display
+    assert "ping" not in display
 
 
-async def test_next_runs_are_computed_from_the_date_given(tester: CommandTester) -> None:
-    DebugCommand.use_schedules(schedules(default=Schedule(every(60, "ping"))))
+async def test_next_runs_are_computed_from_the_date_given() -> None:
+    _code, display = await run(
+        schedules(default=Schedule(every(60, "ping"))), "--date", "2026-01-01T05:00:30+00:00"
+    )
 
-    _ = await run(tester, "--date", "2026-01-01T05:00:30+00:00")
-
-    assert "computed from 2026-01-01T05:00:30+00:00" in tester.display
-    assert "2026-01-01T05:01:00+00:00" in tester.display
+    assert "computed from 2026-01-01T05:00:30+00:00" in display
+    assert "2026-01-01T05:01:00+00:00" in display
 
 
-async def test_ended_messages_are_hidden_unless_all_are_asked_for(tester: CommandTester) -> None:
+async def test_ended_messages_are_hidden_unless_all_are_asked_for() -> None:
     ended = every(60, "gone", until="2026-01-01T00:00:30+00:00")
-    DebugCommand.use_schedules(schedules(default=Schedule(ended, every(60, "live"))))
+    listed = schedules(default=Schedule(ended, every(60, "live")))
 
-    _ = await run(tester)
-    hidden = tester.display
-    _ = await run(tester, "--all")
+    _code, hidden = await run(listed)
+    _code, shown = await run(listed, "--all")
 
     assert "gone" not in hidden
-    assert "gone" in tester.display
+    assert "gone" in shown
 
 
-async def test_sorting_orders_by_next_run(tester: CommandTester) -> None:
-    DebugCommand.use_schedules(schedules(default=Schedule(every(3600, "slow"), every(60, "fast"))))
+async def test_sorting_orders_by_next_run() -> None:
+    _code, display = await run(
+        schedules(default=Schedule(every(3600, "slow"), every(60, "fast"))), "--sort"
+    )
 
-    _ = await run(tester, "--sort")
-
-    display = tester.display
     assert display.index("fast") < display.index("slow")
 
 
-async def test_a_stateful_schedule_is_listed_from_where_it_got_to(tester: CommandTester) -> None:
+async def test_a_stateful_schedule_is_listed_from_where_it_got_to() -> None:
     cache = ArrayAdapter()
     await Checkpoint("scheduler_checkpoint_default", cache=cache).save(
         at("2026-01-01T10:00:00+00:00"), 0
     )
-    DebugCommand.use_schedules(schedules(default=Schedule(every(60, "ping")).stateful(cache)))
 
-    _ = await run(tester)
+    _code, display = await run(schedules(default=Schedule(every(60, "ping")).stateful(cache)))
 
-    assert "is stateful" in tester.display
-    assert "2026-01-01T10:01:00+00:00" in tester.display
-
-
-async def test_an_empty_schedule_is_reported(tester: CommandTester) -> None:
-    DebugCommand.use_schedules(schedules(default=Schedule()))
-
-    _ = await run(tester)
-
-    assert "No recurring messages found" in tester.display
+    assert "is stateful" in display
+    assert "2026-01-01T10:01:00+00:00" in display
 
 
-async def test_no_schedule_at_all_is_an_error(tester: CommandTester) -> None:
-    DebugCommand.use_schedules(schedules())
+async def test_an_empty_schedule_is_reported() -> None:
+    _code, display = await run(schedules(default=Schedule()))
 
-    assert await run(tester) == ExitCode.INVALID
-
-
-async def test_an_unknown_schedule_is_an_error(tester: CommandTester) -> None:
-    DebugCommand.use_schedules(schedules(default=Schedule()))
-
-    assert await run(tester, "nope") == ExitCode.FAILURE
+    assert "No recurring messages found" in display
 
 
-async def test_a_date_it_cannot_read_is_an_error(tester: CommandTester) -> None:
-    DebugCommand.use_schedules(schedules(default=Schedule(every(60, "ping"))))
+async def test_no_schedule_at_all_is_an_error() -> None:
+    code, _display = await run(schedules())
 
-    assert await run(tester, "--date", "when pigs fly") == ExitCode.INVALID
+    assert code == ExitCode.INVALID
+
+
+async def test_an_unknown_schedule_is_an_error() -> None:
+    code, _display = await run(schedules(default=Schedule()), "nope")
+
+    assert code == ExitCode.FAILURE
+
+
+async def test_a_date_it_cannot_read_is_an_error() -> None:
+    code, _display = await run(schedules(default=Schedule(every(60, "ping"))), "--date", "pigs fly")
+
+    assert code == ExitCode.INVALID
+
+
+async def test_without_a_container_the_console_reports_the_missing_schedules() -> None:
+    command = CommandTester(Application(catch_exceptions=False), "debug:scheduler")
+
+    with pytest.raises(MissingContainerError, match="schedules"):
+        _ = await command.execute()
+
+
+def test_the_command_requires_its_schedules() -> None:
+    construct = cast("Callable[..., object]", DebugCommand)
+    with pytest.raises(TypeError):
+        _ = construct()
 
 
 @pytest.mark.parametrize(
@@ -156,4 +187,4 @@ async def test_a_date_it_cannot_read_is_an_error(tester: CommandTester) -> None:
     ],
 )
 def test_intervals_read_in_calendar_units(end: str, expected: str) -> None:
-    assert format_interval(at(START), at(end)) == expected
+    assert _format_interval(at(START), at(end)) == expected

@@ -5,7 +5,6 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
-import zlib
 from contextlib import suppress
 from typing import TYPE_CHECKING, final
 
@@ -132,7 +131,7 @@ class RecurringMessage(MessageProviderInterface):
                     str(self._trigger),
                 )
             )
-            self._id = f"{zlib.crc32(identity.encode()):08x}"
+            self._id = hashlib.blake2b(identity.encode(), digest_size=8).hexdigest()
         return self._id
 
     def get_provider(self) -> MessageProviderInterface:

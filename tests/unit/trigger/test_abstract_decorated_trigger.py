@@ -11,23 +11,6 @@ from xtr_scheduler.trigger import (
 )
 
 
-def test_inner_is_the_trigger_at_the_bottom() -> None:
-    periodical = PeriodicalTrigger(60)
-    decorated = JitterTrigger(
-        ExcludeTimeTrigger(periodical, "2026-01-01T00:00Z", "2026-01-02T00:00Z")
-    )
-
-    assert decorated.inner() is periodical
-    assert decorated.decorated is not periodical
-
-
-def test_decorators_are_listed_outermost_first() -> None:
-    excluding = ExcludeTimeTrigger(PeriodicalTrigger(60), "2026-01-01T00:00Z", "2026-01-02T00:00Z")
-    jitter = JitterTrigger(excluding)
-
-    assert list(jitter.decorators()) == [jitter, excluding]
-
-
 def test_the_starting_point_reaches_the_trigger_at_the_bottom() -> None:
     periodical = PeriodicalTrigger(60)
     decorated = ExcludeTimeTrigger(periodical, "2030-01-01T00:00Z", "2030-01-02T00:00Z")

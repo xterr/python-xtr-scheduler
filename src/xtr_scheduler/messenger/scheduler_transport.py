@@ -85,9 +85,25 @@ class SchedulerTransport(TransportInterface):
                         received = True
                         yield self._envelope(ScheduledStamp.from_context(context), message)
                 if not received:
-                    await self._clock.sleep_async(self._poll_interval)
+                    await self._clock.sleep_async(self._wait())
         finally:
             await self._generator.close()
+
+    def _wait(self) -> float:
+        """Return the wait before the next poll: the interval, or less if a run is due sooner.
+
+        A next run already behind means nothing was read from the schedule —
+        another process holds its lock, or the schedule was just reloaded — so
+        this waits the whole interval rather than asking again at once, which
+        would spin on the lock store.
+        """
+        until = self._generator.wait_until
+        if until is None:
+            return self._poll_interval
+        remaining = (until - self._clock.now()).total_seconds()
+        if remaining <= 0:
+            return self._poll_interval
+        return min(self._poll_interval, remaining)
 
     @override
     async def ack(self, envelope: Envelope) -> None:

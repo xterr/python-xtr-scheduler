@@ -8,6 +8,7 @@ from .scheduler_transport_factory import SchedulerTransportFactory
 from .service_call_message import ServiceCallMessage
 from .service_call_message_handler import ServiceCallMessageHandler
 from .task_locator import TaskLocator
+from .task_methods import TaskMethods
 
 __all__ = [
     "ScheduledStamp",
@@ -16,4 +17,5 @@ __all__ = [
     "ServiceCallMessage",
     "ServiceCallMessageHandler",
     "TaskLocator",
+    "TaskMethods",
 ]

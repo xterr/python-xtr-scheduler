@@ -139,7 +139,7 @@ def _zone(timezone: tzinfo | str | None) -> tzinfo | None:
 def _unhash(expression: str, context: str) -> str:
     """Replace each hashed field by the value ``context`` picks for it."""
     expression = _HASH_ALIASES.get(expression, expression)
-    parts = expression.split(" ")
+    parts = expression.split()
     if len(parts) != _FIELDS:
         return expression
     seed = int.from_bytes(hashlib.sha256(context.encode()).digest(), "big")
@@ -151,5 +151,9 @@ def _unhash(expression: str, context: str) -> str:
         low, high = _HASH_RANGES[position]
         if matched.group(1) is not None:
             low, high = int(matched.group(1)), int(matched.group(2))
+            if low > high:
+                raise InvalidArgumentError(
+                    f'The hashed range "{part}" of "{expression}" has its bounds reversed.'
+                )
         parts[position] = str(picker.randint(low, high))
     return " ".join(parts)

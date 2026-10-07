@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, final
 from xtr_clock import Clock
 
 from .event import FailureEvent, PostRunEvent, PreRunEvent
+from .exception import InvalidArgumentError
 from .generator.message_generator import MessageGenerator
 
 if TYPE_CHECKING:
@@ -79,7 +80,8 @@ class Scheduler:
         after downtime is worked through without pauses.
 
         Raises:
-            KeyError: If no handler is registered for a message's type.
+            InvalidArgumentError: If no handler is registered for a message's
+                type.
             Exception: Whatever a handler raised, unless a failure listener
                 ignored it.
         """
@@ -94,7 +96,7 @@ class Scheduler:
                             ran = await self._run(generator, context, message) or ran
                 if not ran:
                     elapsed = (self._clock.now() - started).total_seconds()
-                    await self._clock.sleep_async(sleep - elapsed)
+                    await self._clock.sleep_async(max(0.0, sleep - elapsed))
                 else:
                     await asyncio.sleep(0)
         finally:
@@ -116,7 +118,13 @@ class Scheduler:
         self, generator: MessageGenerator, context: MessageContext, message: object
     ) -> bool:
         """Handle ``message``; return whether its handler ran to completion."""
-        handler = self._handlers[type(message)]
+        handler = self._handlers.get(type(message))
+        if handler is None:
+            registered = ", ".join(sorted(kind.__qualname__ for kind in self._handlers))
+            raise InvalidArgumentError(
+                f'No handler is registered for "{type(message).__qualname__}". '
+                f"Registered types: {registered}."
+            )
         if self._dispatcher is None:
             _ = await _called(handler, message)
             return True

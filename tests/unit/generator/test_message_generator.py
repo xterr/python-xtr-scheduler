@@ -19,9 +19,13 @@ from xtr_scheduler import RecurringMessage, Schedule, ScheduleProviderInterface
 from xtr_scheduler.exception import SchedulerLogicError, SchedulerRuntimeError
 from xtr_scheduler.generator import Checkpoint, MessageGenerator
 from xtr_scheduler.trigger import TriggerInterface
+from xtr_scheduler.trigger.message_provider_interface import MessageProviderInterface
+from xtr_scheduler.trigger.periodical_trigger import PeriodicalTrigger
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import AsyncIterator, Callable
+
+    from xtr_scheduler.generator.message_context import MessageContext
 
 pytestmark = pytest.mark.anyio
 
@@ -78,6 +82,42 @@ class Frozen(TriggerInterface):
     def get_next_run_date(self, run: datetime, /) -> datetime | None:
         del run
         return moment("22:13:00")
+
+
+@final
+class Raising(TriggerInterface):
+    """A trigger that fails when the plan is built."""
+
+    @override
+    def __str__(self) -> str:
+        return "raising"
+
+    @override
+    def get_next_run_date(self, run: datetime, /) -> datetime | None:
+        del run
+        raise RuntimeError("boom")
+
+
+@final
+class RaisingProvider(MessageProviderInterface):
+    """A provider that fails before it yields the run's first message."""
+
+    def __init__(self) -> None:
+        self.raises = True
+        self.calls = 0
+
+    @property
+    @override
+    def id(self) -> str:
+        return "raising-provider"
+
+    @override
+    async def get_messages(self, context: MessageContext, /) -> AsyncIterator[object]:
+        del context
+        self.calls += 1
+        if self.raises:
+            raise RuntimeError("provider boom")
+        yield Named("message")
 
 
 def _first() -> RecurringMessage:
@@ -361,6 +401,26 @@ async def test_a_run_whose_record_failed_is_sent_again_by_the_next_process() -> 
         clock.sleep(60)
 
 
+async def test_a_run_whose_provider_raises_before_yielding_is_sent_again() -> None:
+    clock = clock_at("22:12:00")
+    cache = ArrayAdapter()
+    provider = RaisingProvider()
+    recurring = RecurringMessage.trigger(PeriodicalTrigger("1 minute"), provider)
+
+    def process() -> MessageGenerator:
+        schedule = Schedule(recurring).stateful(cache)
+        return MessageGenerator(schedule, "dummy", clock, Checkpoint("dummy", cache=cache))
+
+    assert await drain(process()) == []
+    clock.sleep(60 + 10)
+
+    with pytest.raises(RuntimeError, match="provider boom"):
+        _ = await drain(process())
+
+    provider.raises = False
+    assert await drain(process()) == [Named("message")]
+
+
 async def test_a_trigger_that_does_not_move_forward_is_refused() -> None:
     clock = clock_at("22:12:00")
     schedule = Schedule(RecurringMessage.trigger(Frozen(), Plain())).stateful(ArrayAdapter())
@@ -421,6 +481,18 @@ async def test_closing_hands_the_schedule_s_lock_back() -> None:
 
 async def test_closing_before_ever_running_does_nothing() -> None:
     await MessageGenerator(Schedule(), "dummy", clock_at("22:12:00")).close()
+
+
+async def test_the_lock_is_handed_back_when_building_the_plan_fails() -> None:
+    clock = clock_at("22:12:00")
+    lock = Lock(Key("schedule"), InMemoryStore())
+    schedule = Schedule(RecurringMessage.trigger(Raising(), Plain())).lock(lock)
+    generator = MessageGenerator(schedule, "dummy", clock)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        _ = await drain(generator)
+
+    assert not await lock.is_acquired()
 
 
 async def test_both_passes_of_the_hour_a_clock_goes_back_are_sent_in_order() -> None:

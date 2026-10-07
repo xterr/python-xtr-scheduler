@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
-from typing import TYPE_CHECKING, final
+from typing import TYPE_CHECKING
 
 from typing_extensions import override
 
 from .stateful_trigger_interface import StatefulTriggerInterface
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
     from datetime import datetime
 
     from .trigger_interface import TriggerInterface
@@ -48,20 +47,3 @@ class AbstractDecoratedTrigger(StatefulTriggerInterface, metaclass=ABCMeta):
     def decorated(self) -> TriggerInterface:
         """Return the trigger this one wraps directly."""
         return self._inner
-
-    @final
-    def inner(self) -> TriggerInterface:
-        """Return the trigger at the bottom of the decorations."""
-        inner = self._inner
-        while isinstance(inner, AbstractDecoratedTrigger):
-            inner = inner.decorated
-        return inner
-
-    @final
-    def decorators(self) -> Iterator[AbstractDecoratedTrigger]:
-        """Yield this decoration, then every one beneath it, outermost first."""
-        yield self
-        inner = self._inner
-        while isinstance(inner, AbstractDecoratedTrigger):
-            yield inner
-            inner = inner.decorated

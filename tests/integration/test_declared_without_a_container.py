@@ -1,4 +1,4 @@
-"""End-to-end with no container: discovery finds the transport, declarations fill it."""
+"""End-to-end with no container: the caller wires the handler from the declarations itself."""
 
 from __future__ import annotations
 
@@ -8,10 +8,17 @@ from typing import final
 import pytest
 from xtr_clock.testing import mock_time
 from xtr_event_dispatcher import EventDispatcher
-from xtr_messenger import MessageBusConfig, TransportConfig, WorkerFactory
+from xtr_messenger import (
+    HandlersLocator,
+    MessageBusConfig,
+    TransportConfig,
+    WorkerFactory,
+)
 from xtr_messenger.event import WorkerRunningEvent
 
 from xtr_scheduler.decorator import as_periodic_task
+from xtr_scheduler.messenger import ServiceCallMessage, ServiceCallMessageHandler, TaskMethods
+from xtr_scheduler.registry import declared_task_methods, declared_task_targets
 
 pytestmark = pytest.mark.anyio
 
@@ -43,16 +50,25 @@ class StopAfter:
             event.worker.stop()
 
 
-async def test_declared_tasks_run_on_a_discovered_schedule_transport() -> None:
+async def test_declared_tasks_run_when_the_caller_wires_the_handler() -> None:
     RAN.clear()
     config = MessageBusConfig(
         transports={"scheduler": TransportConfig("schedule://tests-no-container")}
     )
     events = EventDispatcher()
     events.add_listener(WorkerRunningEvent, StopAfter(3))
+    # No container builds the handler, so the caller supplies its dependencies:
+    # the declared targets and the declared method allow-list.
+    handler = ServiceCallMessageHandler(
+        declared_task_targets(), TaskMethods(declared_task_methods())
+    )
+    handlers = HandlersLocator()
+    _ = handlers.register(ServiceCallMessage, handler)
 
     with mock_time("2026-01-01T00:00:00+00:00") as clock:
-        worker = WorkerFactory(config, event_dispatcher=events).worker(["scheduler"])
+        worker = WorkerFactory(config, handlers=handlers, event_dispatcher=events).worker(
+            ["scheduler"]
+        )
         await asyncio.wait_for(worker.run(), 5)
 
         assert RAN == ["report eu", "refresh", "report eu"]

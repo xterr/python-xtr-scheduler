@@ -107,24 +107,32 @@ class PeriodicalTrigger(StatefulTriggerInterface):
             self._from = run
         if self._step is not None:
             return self._next_on_calendar(self._from, self._step, run)
-        if self._until <= run:
+        # Every comparison is between absolute instants: two dates on one zone
+        # compare by their wall clock, which ignores fold, so the hour a clock
+        # goes back — lived through twice — would otherwise collapse to one.
+        until_at = microseconds(self._until)
+        run_at = microseconds(run)
+        if until_at <= run_at:
             return None
         start = microseconds(self._from)
-        passed = (microseconds(run) - start) // self._interval_us
+        passed = (run_at - start) // self._interval_us
         next_run = from_microseconds((passed + 1) * self._interval_us + start, self._from.tzinfo)
-        if self._from > next_run:
-            return self._from
-        return next_run if self._until > next_run else None
+        if start > microseconds(next_run):
+            return self._from if until_at > start else None
+        return next_run if until_at > microseconds(next_run) else None
 
     def _next_on_calendar(
         self, start: datetime, step: _CalendarStep, run: datetime
     ) -> datetime | None:
         count = _steps_before(start, step, run)
+        until_at = microseconds(self._until)
+        run_at = microseconds(run)
         while True:
             candidate = _shift(start, step.months * count, step.days * count)
-            if candidate >= self._until:
+            candidate_at = microseconds(candidate)
+            if candidate_at >= until_at:
                 return None
-            if candidate > run:
+            if candidate_at > run_at:
                 return candidate
             count += 1
 
