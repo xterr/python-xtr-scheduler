@@ -5,7 +5,7 @@ from __future__ import annotations
 from types import FunctionType
 from typing import TYPE_CHECKING, TypeVar, cast, final
 
-from xtr_scheduler.registry.declarations import declare_task
+from xtr_scheduler.registry.declarations import declare_task, refuse_private_method
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -45,6 +45,10 @@ def declaring(declaration: TaskDeclaration) -> Callable[[TargetT], TargetT]:
             target.declarations.append(declaration)
             return target
         if isinstance(target, FunctionType) and _is_method(target):
+            # Refused here rather than in ``__set_name__``: an error raised
+            # there reaches the caller wrapped in a RuntimeError on Python 3.11.
+            owner = target.__qualname__.rpartition(".")[0]
+            refuse_private_method(f"{target.__module__}.{owner}", target.__name__)
             return cast("TargetT", _MethodTasks(target, declaration))
         declare_task(target, declaration)
         return target

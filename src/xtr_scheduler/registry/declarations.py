@@ -25,6 +25,7 @@ __all__ = [
     "declared_schedule_class",
     "declared_schedule_names",
     "declared_tasks",
+    "refuse_private_method",
     "reset_declarations",
     "schedules_declared_on",
     "task_name",
@@ -68,13 +69,20 @@ def declare_task(target: object, declaration: TaskDeclaration) -> None:
             declared on one is refused where it is written, not accepted here
             and refused on every run.
     """
-    method = declaration.method
-    if method is not None and method != "__call__" and method.startswith("_"):
-        raise SchedulerLogicError(
-            f'The task "{task_name(target)}" declares the private method "{method}".'
-        )
+    refuse_private_method(task_name(target), declaration.method)
     _TASKS.append((target, declaration))
     _append(target, TASKS_ATTRIBUTE, declaration)
+
+
+def refuse_private_method(task: str, method: str | None) -> None:
+    """Refuse a task named ``task`` calling the private method ``method``.
+
+    Raises:
+        SchedulerLogicError: If ``method`` is private or a dunder other than
+            ``__call__``.
+    """
+    if method is not None and method != "__call__" and method.startswith("_"):
+        raise SchedulerLogicError(f'The task "{task}" declares the private method "{method}".')
 
 
 def schedules_declared_on(obj: object) -> tuple[str, ...]:
