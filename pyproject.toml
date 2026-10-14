@@ -1,6 +1,6 @@
 [project]
 name = "xtr-scheduler"
-version = "4.0.1"
+version = "4.0.2"
 description = "Recurring messages on xtr-messenger: cron and periodic triggers, catch-up after downtime, locks and saved state across restarts."
 readme = "README.md"
 authors = [
