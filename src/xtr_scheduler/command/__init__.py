@@ -1,4 +1,4 @@
-"""Console commands — needs the ``console`` extra."""
+"""Console commands — needs xtr-console installed beside this package."""
 
 from __future__ import annotations
 

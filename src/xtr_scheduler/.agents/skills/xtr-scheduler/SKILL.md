@@ -19,8 +19,12 @@ any other transport. Handlers, transports and routing are xtr-messenger's job �
 - `.lock(lock)` so one process sends, `.stateful(pool)` so a restart resumes,
   `.process_only_last_missed_run()` to skip a backlog.
 - Run it: `<script> messenger:consume scheduler_<name>`.
-- Inspect it: `debug:scheduler` (needs the `console` extra).
-- Cron needs the `cron` extra: `uv add "xtr-scheduler[cron,di,console]"`.
+- In an application, with xtr-dependency-injection installed beside the package (it is not a
+  dependency): activate `SchedulerBundle`. Without the container, the `schedule://` transport
+  serves the declared schedules and `Scheduler` runs schedules in process; only
+  `xtr_scheduler.bundle` imports it.
+- Inspect it: `debug:scheduler`, which the bundle adds when xtr-console is installed beside it.
+- Cron needs the `cron` extra: `uv add "xtr-scheduler[cron]"`.
 
 ## Declare a task
 
@@ -227,8 +231,10 @@ in-memory `Lock` through `.lock(...)` to test a takeover.
 `SchedulerBundle`, which brings the messenger bundle with it. That is the steps below a recipe can
 do; the tasks and starter schedule it prints for you to make.
 
-1. **Install** — `uv add "xtr-scheduler[cron,di,console]"`; add xtr-cache for the `scheduler` pool a
-   schedule keeps its state in, and xtr-lock for `LockFactory`.
+1. **Install** — `uv add "xtr-scheduler[cron]" xtr-dependency-injection`: the bundle needs the
+   container installed beside it, never as an extra. Install xtr-console beside it for
+   `debug:scheduler`, and xtr-cache for the `scheduler` pool a schedule keeps its state in.
+   xtr-lock, for `LockFactory`, comes with the package.
 2. **Activate** — `SchedulerBundle: {"all": True}` in `BUNDLES` in `<app>/bundles.py`
    (`from xtr_scheduler.bundle import SchedulerBundle`).
 3. **Brings along** — the messenger bundle always; the event dispatcher and console bundles when

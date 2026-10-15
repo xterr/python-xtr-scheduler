@@ -39,17 +39,22 @@ wherever routing puts it — a RabbitMQ queue and its worker pool, say.
 ## Install
 
 ```sh
-uv add "xtr-scheduler[cron]"            # + cron expressions
-uv add "xtr-scheduler[cron,di]"         # + a SchedulerBundle for xtr-dependency-injection
-uv add "xtr-scheduler[cron,console]"    # + the debug:scheduler console command
+uv add "xtr-scheduler[cron]"                            # + cron expressions
+uv add "xtr-scheduler[cron]" xtr-dependency-injection   # + the container, for the SchedulerBundle
+uv add xtr-console                                      # beside it: the debug:scheduler console command
 ```
 
 | Extra | Brings | For |
 | --- | --- | --- |
-| *(none)* | `xtr-messenger`, `xtr-clock`, `xtr-lock`, `xtr-cache-contracts`, `xtr-event-dispatcher` | Intervals, the transport, events |
+| *(none)* | `xtr-messenger`, `xtr-clock`, `xtr-lock`, `xtr-cache-contracts`, `xtr-event-dispatcher`, `xtr-event-dispatcher-contracts`, `xtr-service-contracts`, `typing-extensions` | Intervals, the transport, events |
 | `cron` | `croniter` | `RecurringMessage.cron(...)` and `@as_cron_task` |
-| `di` | `xtr-dependency-injection` | A `SchedulerBundle` |
-| `console` | `xtr-console` | `debug:scheduler` |
+
+No xtr package is an extra, and the container is not a dependency: the `SchedulerBundle` is used
+when [xtr-dependency-injection](../xtr-dependency-injection) is installed beside the package — see
+[Kernel / bundle](#kernel--bundle) — and schedules, the transport and `Scheduler` work without it,
+as the [Quick start](#quick-start) shows. With the container in place,
+[xtr-console](../xtr-console) brings `debug:scheduler`, and [xtr-cache](../xtr-cache), with its
+bundle active, a `scheduler` pool for a schedule to keep its state in.
 
 Requires Python 3.11+.
 
@@ -203,8 +208,9 @@ declared_task_targets(), TaskMethods(declared_task_methods()))` — rather than 
 Everything adding this package to an application on
 [xtr-dependency-injection](../xtr-dependency-injection) takes — and, read backwards, what removing it undoes.
 
-- **Install** — `uv add "xtr-scheduler[cron,di,console]"`; add `cache` for the `scheduler` cache
-  pool a schedule can keep its state in.
+- **Install** — `uv add "xtr-scheduler[cron]" xtr-dependency-injection`: the bundle needs the
+  container installed beside it, never as an extra. Install xtr-console beside it for
+  `debug:scheduler`, and xtr-cache for the `scheduler` cache pool a schedule keeps its state in.
 - **Recipe** — `uv run xtr-recipes recipes:sync` does the *Activate* step below: it lists
   `SchedulerBundle`, which brings the messenger bundle with it. There is no config file,
   environment or ignore line to write; it prints the steps to declare your recurring work and copy
@@ -225,6 +231,9 @@ Everything adding this package to an application on
 - **Check** — `debug:scheduler` lists each schedule with every message's next run.
 
 ## Kernel / bundle
+
+With [xtr-dependency-injection](../xtr-dependency-injection) installed beside the package — it is
+not a dependency, and nothing outside `xtr_scheduler.bundle` imports it — list the bundle:
 
 ```python
 # app/bundles.py
