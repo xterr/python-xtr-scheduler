@@ -228,21 +228,24 @@ in-memory `Lock` through `.lock(...)` to test a takeover.
 ## Use in an application
 
 `uv run xtr-recipes recipes:sync` applies the recipe shipped with this package: it lists
-`SchedulerBundle`, which brings the messenger bundle with it. That is the steps below a recipe can
-do; the tasks and starter schedule it prints for you to make.
+`SchedulerBundle`, which brings the messenger bundle with it, and writes
+`<app>/config/packages/scheduler.py` with the bundle's own defaults. That is the steps below a
+recipe can do; the tasks and starter schedule it prints for you to make.
 
 1. **Install** — `uv add "xtr-scheduler[cron]" xtr-dependency-injection`: the bundle needs the
    container installed beside it, never as an extra. Install xtr-console beside it for
    `debug:scheduler`, and xtr-cache for the `scheduler` pool a schedule keeps its state in.
    xtr-lock, for `LockFactory`, comes with the package.
-2. **Activate** — `SchedulerBundle: {"all": True}` in `BUNDLES` in `<app>/bundles.py`
+2. **Activate** — `SchedulerBundle: {"all": True}` in `BUNDLES` in `<app>/config/bundles.py`
    (`from xtr_scheduler.bundle import SchedulerBundle`).
 3. **Brings along** — the messenger bundle always; the event dispatcher and console bundles when
    those packages are installed.
-4. **Configure** — optional; with no configuration every task joins a plain `default` schedule:
+4. **Configure** — the recipe writes `<app>/config/packages/scheduler.py` holding the defaults,
+   scheduled messages handled by the worker consuming the schedule, and that is where the
+   handover is changed. With no schedule declared, every task joins a plain `default` one:
 
    ```python
-   # <app>/config/scheduler.py
+   # <app>/config/packages/scheduler.py
    from xtr_dependency_injection import configure
    from xtr_scheduler.bundle import SchedulerConfig
 
@@ -262,7 +265,9 @@ do; the tasks and starter schedule it prints for you to make.
    computes from another date, `--all` shows messages that never run again, `--sort` orders by next
    run.
 8. **Remove** — drop the `BUNDLES` entry, delete `<app>/schedule.py` and every `@as_cron_task` /
-   `@as_periodic_task`, then `uv remove xtr-scheduler`.
+   `@as_periodic_task`; `uv run xtr-recipes recipes:remove xtr-scheduler` deletes
+   `<app>/config/packages/scheduler.py`, unless you edited it, in which case it is moved aside to
+   `scheduler.py.removed`. Then `uv remove xtr-scheduler`.
 
 ## Errors
 

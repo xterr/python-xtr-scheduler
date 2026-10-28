@@ -1,0 +1,24 @@
+"""How the schedule's messages are handed over.
+
+The schedule itself is declared beside the tasks, with ``@as_cron_task``,
+``@as_periodic_task`` or ``@as_schedule`` from ``xtr_scheduler.decorator``.
+
+```python
+SchedulerConfig(use_messenger_routing=True)
+```
+"""
+
+from __future__ import annotations
+
+from xtr_dependency_injection import configure
+from xtr_scheduler.bundle import SchedulerConfig
+
+__all__ = ["scheduler"]
+
+
+@configure
+def scheduler() -> SchedulerConfig:
+    """Scheduled messages handled by the worker consuming the schedule."""
+    # Turn use_messenger_routing on to hand every scheduled message to the bus's routing, so
+    # it is handled wherever its type is routed rather than by the schedule's own worker.
+    return SchedulerConfig()

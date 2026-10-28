@@ -6,9 +6,12 @@
 # It brings the messenger bundle with it, because a schedule is sent through it.
 "xtr_scheduler.bundle:SchedulerBundle" = { all = true }
 
-# No [files]: configuring is optional. With none every task joins a plain
-# "default" schedule, which keeps no state and takes no lock — see [notes] for
-# the one that resumes after a restart.
+[files]
+# Destination under the application package = template under this recipe.
+# The bundle's own defaults written out — every task on a plain "default"
+# schedule, keeping no state and taking no lock (see [notes] for one that
+# resumes after a restart) — as the place to change how messages are handed over.
+"config/packages/scheduler.py" = "files/config/scheduler.py.tmpl"
 
 # No [env], and nothing to ignore.
 

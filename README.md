@@ -211,23 +211,29 @@ Everything adding this package to an application on
 - **Install** — `uv add "xtr-scheduler[cron]" xtr-dependency-injection`: the bundle needs the
   container installed beside it, never as an extra. Install xtr-console beside it for
   `debug:scheduler`, and xtr-cache for the `scheduler` cache pool a schedule keeps its state in.
-- **Recipe** — `uv run xtr-recipes recipes:sync` does the *Activate* step below: it lists
-  `SchedulerBundle`, which brings the messenger bundle with it. There is no config file,
-  environment or ignore line to write; it prints the steps to declare your recurring work and copy
-  the starter schedule, which a recipe cannot make for you.
-- **Activate** — `SchedulerBundle: {"all": True}` in `BUNDLES` in `<app>/bundles.py`, imported
+- **Recipe** — `uv run xtr-recipes recipes:sync` does the *Activate* and *Configure* steps below:
+  it lists `SchedulerBundle`, which brings the messenger bundle with it, and writes
+  `<app>/config/packages/scheduler.py` with the bundle's own defaults. There is no environment or
+  ignore line to write; it prints the steps to declare your recurring work and copy the starter
+  schedule, which a recipe cannot make for you.
+- **Activate** — `SchedulerBundle: {"all": True}` in `BUNDLES` in `<app>/config/bundles.py`, imported
   from `xtr_scheduler.bundle`.
 - **Brings along** — the messenger bundle always, because schedules are sent through it; the
   event dispatcher and console bundles, when those packages are installed.
-- **Configure** — optional: with no configuration every task joins a plain `default`
-  schedule, which keeps no state and takes no lock. For one that resumes after a restart and
-  sends each run once, copy [a starter schedule](#a-starter-schedule) into
-  `<app>/schedule.py` and activate the cache and lock bundles it needs.
+- **Configure** — optional: the recipe writes `<app>/config/packages/scheduler.py` holding the
+  defaults, scheduled messages handled by the worker consuming the schedule, and that is where
+  the handover is changed. The schedule itself is declared beside the tasks: with no
+  configuration every task joins a plain `default` schedule, which keeps no state and takes no
+  lock. For one that resumes after a restart and sends each run once, copy
+  [a starter schedule](#a-starter-schedule) into `<app>/schedule.py` and activate the cache and
+  lock bundles it needs.
 - **Environment** — nothing.
 - **Ignore** — nothing.
 - **Run** — a worker is `<script> messenger:consume scheduler_default`.
 - **Remove** — drop the `BUNDLES` entry, delete `<app>/schedule.py` and every
-  `@as_cron_task` / `@as_periodic_task`, then `uv remove xtr-scheduler`.
+  `@as_cron_task` / `@as_periodic_task`; `uv run xtr-recipes recipes:remove xtr-scheduler`
+  deletes `<app>/config/packages/scheduler.py`, unless you edited it, in which case it is moved
+  aside to `scheduler.py.removed`. Then `uv remove xtr-scheduler`.
 - **Check** — `debug:scheduler` lists each schedule with every message's next run.
 
 ## Kernel / bundle
@@ -236,7 +242,7 @@ With [xtr-dependency-injection](../xtr-dependency-injection) installed beside th
 not a dependency, and nothing outside `xtr_scheduler.bundle` imports it — list the bundle:
 
 ```python
-# app/bundles.py
+# app/config/bundles.py
 from xtr_scheduler.bundle import SchedulerBundle
 
 BUNDLES = {SchedulerBundle: {"all": True}}
