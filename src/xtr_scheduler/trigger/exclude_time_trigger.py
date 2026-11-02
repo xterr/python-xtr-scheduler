@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, final
 
 from typing_extensions import override
 
-from xtr_scheduler._time import aware
+from xtr_scheduler._time import aware, microseconds
 
 from .abstract_decorated_trigger import AbstractDecoratedTrigger
 
@@ -54,6 +54,11 @@ class ExcludeTimeTrigger(AbstractDecoratedTrigger):
     @override
     def get_next_run_date(self, run: datetime, /) -> datetime | None:
         next_run = self._inner.get_next_run_date(run)
-        if next_run is not None and self._from <= next_run <= self._until:
+        # Compared as instants: on one zone dates compare by their wall clock, which
+        # ignores fold, so a run in the first pass of the hour a clock goes back would
+        # read as falling in a window set in the second.
+        if next_run is not None and (
+            microseconds(self._from) <= microseconds(next_run) <= microseconds(self._until)
+        ):
             return self._inner.get_next_run_date(self._until)
         return next_run

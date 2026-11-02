@@ -338,6 +338,29 @@ async def test_a_batch_left_half_sent_is_finished_by_the_next_process() -> None:
     assert await drain(process()) == [SECOND]
 
 
+async def test_a_batch_left_half_sent_in_the_hour_a_clock_repeats_is_finished_too() -> None:
+    # 03:00 Bucharest happens twice on 2026-10-25; the batch is the second one, at 01:00 UTC.
+    clock = MockClock(datetime(2026, 10, 25, 0, 30, tzinfo=UTC))
+    cache = ArrayAdapter()
+
+    def process() -> MessageGenerator:
+        schedule = Schedule(
+            RecurringMessage.cron("0 * * * *", FIRST, timezone="Europe/Bucharest"),
+            RecurringMessage.cron("0 * * * *", SECOND, timezone="Europe/Bucharest"),
+        ).stateful(cache)
+        return MessageGenerator(schedule, "dummy", clock, Checkpoint("dummy", cache=cache))
+
+    first_process = process()
+    assert await drain(first_process) == []
+    clock.sleep(30 * 60)
+    async with aclosing(first_process.get_messages()) as messages:
+        async for _context, message in messages:
+            assert message == FIRST
+            break
+
+    assert await drain(process()) == [SECOND]
+
+
 @pytest.mark.parametrize("failure", ["readonly", "dead"])
 async def test_nothing_is_sent_while_the_state_cannot_be_saved(failure: str) -> None:
     clock = clock_at("22:12:00")

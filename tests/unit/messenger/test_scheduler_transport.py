@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from contextlib import aclosing
-from datetime import datetime
+from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 import pytest
 from xtr_clock import MockClock
@@ -63,6 +64,21 @@ async def test_it_waits_only_until_the_next_run_when_that_is_sooner_than_a_poll(
 
     assert envelope.message == Named("soon")
     assert clock.now().isoformat() == "2026-01-01T00:00:02+00:00"
+
+
+async def test_it_waits_only_until_a_next_run_in_the_hour_a_clock_repeats() -> None:
+    # Read in Bucharest, now is 03:59:59.8 the first time and the run 03:00:00.2 the
+    # second: four tenths of a second apart, though the wall clock reads it earlier.
+    clock = MockClock("2026-10-25T00:59:59.800000+00:00", "Europe/Bucharest")
+    generator = ListedGenerator([], [(a_context(), Named("soon"))])
+    bucharest = ZoneInfo("Europe/Bucharest")
+    generator.next_due = datetime(2026, 10, 25, 3, 0, 0, 200000, bucharest, fold=1)
+    transport = SchedulerTransport(generator, clock=clock, poll_interval=60)
+
+    [envelope] = await first(transport, 1)
+
+    assert envelope.message == Named("soon")
+    assert clock.now().astimezone(UTC).isoformat() == "2026-10-25T01:00:00.200000+00:00"
 
 
 async def test_a_next_run_already_past_waits_a_whole_poll_interval() -> None:

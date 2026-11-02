@@ -9,6 +9,7 @@ from typing_extensions import override
 from xtr_clock import Clock
 from xtr_messenger import Envelope, ReceivedStamp, RedispatchMessage, TransportInterface
 
+from xtr_scheduler._time import seconds_between
 from xtr_scheduler.exception import SchedulerLogicError
 
 from .scheduled_stamp import ScheduledStamp
@@ -100,7 +101,7 @@ class SchedulerTransport(TransportInterface):
         until = self._generator.wait_until
         if until is None:
             return self._poll_interval
-        remaining = (until - self._clock.now()).total_seconds()
+        remaining = seconds_between(self._clock.now(), until)
         if remaining <= 0:
             return self._poll_interval
         return min(self._poll_interval, remaining)

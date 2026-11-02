@@ -150,9 +150,11 @@ def _format_interval(start: datetime, end: datetime) -> str:
     In years, months, days, hours and minutes, then seconds to the
     millisecond, leaving out what is zero.
     """
+    # In UTC before comparing: on one zone dates compare by their wall clock, which
+    # ignores fold, so the second pass of a repeated hour would read as the first.
+    start, end = start.astimezone(UTC), end.astimezone(UTC)
     overdue = end < start
     first, last = (end, start) if overdue else (start, end)
-    first, last = first.astimezone(UTC), last.astimezone(UTC)
     months = (last.year - first.year) * 12 + last.month - first.month
     if shift_calendar(first, months=months) > last:
         months -= 1

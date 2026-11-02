@@ -100,6 +100,12 @@ dependencies and a task function may ask for services.
   `JitterTrigger`, `PeriodicalTrigger`, `CronExpressionTrigger`.
 - To decide the messages of each run, pass a `MessageProviderInterface` instead of a message —
   `CallbackMessageProvider(lambda context: [Invoice(t) for t in active_tenants()])`.
+- A recurring message's id — what saved state resumes it by — comes from the data its message
+  holds, written as JSON with sorted keys, so it is the same in every process — even when the
+  serializer refuses to carry it (a naive datetime, a value its field does not declare). A
+  message holding something with no JSON form at all, a callable or a lock, is told apart by its
+  class alone; name it with `StaticMessageProvider([message], "<id>")` when one schedule sends
+  two of its class.
 
 ## Write the schedule itself
 
@@ -167,7 +173,8 @@ RecurringMessage.every("1 hour", RedispatchMessage(BuildReport(), "reports"))  #
 
 `SchedulerConfig(use_messenger_routing=True)`, or a DSN
 `schedule://default?use_messenger_routing=true`, does it for a whole schedule. The message carries
-a `ScheduledStamp` (`name`, `id`, `trigger`, `triggered_at`, `next_trigger_at`) wherever it lands.
+a `ScheduledStamp` (`name`, `id`, `trigger`, `triggered_at`, `next_trigger_at`) wherever it lands;
+its dates keep their zone and `fold` across a broker.
 
 ## React to a run
 
@@ -288,4 +295,6 @@ All derive from `SchedulerError` (`xtr_scheduler.exception`):
 - Do not use `RecurringMessage.cron` or `@as_cron_task` without the `cron` extra installed.
 - Do not send a `RedispatchMessage` across a broker: it lives in the process that creates it; the
   message inside is what travels.
+- Do not hold a set or frozenset in a scheduled message: its order, and the id with it, can change
+  from one process to the next. Hold a sorted tuple.
 - Do not read the system clock in a scheduled task; take a `ClockInterface` so a test can freeze it.

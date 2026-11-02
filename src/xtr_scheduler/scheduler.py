@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, final
 
 from xtr_clock import Clock
 
+from ._time import seconds_between
 from .event import FailureEvent, PostRunEvent, PreRunEvent
 from .exception import InvalidArgumentError
 from .generator.message_generator import MessageGenerator
@@ -95,7 +96,7 @@ class Scheduler:
                         async for context, message in due:
                             ran = await self._run(generator, context, message) or ran
                 if not ran:
-                    elapsed = (self._clock.now() - started).total_seconds()
+                    elapsed = seconds_between(started, self._clock.now())
                     await self._clock.sleep_async(max(0.0, sleep - elapsed))
                 else:
                     await asyncio.sleep(0)

@@ -6,10 +6,13 @@ import base64
 import hashlib
 import json
 from contextlib import suppress
-from typing import TYPE_CHECKING, final
+from typing import TYPE_CHECKING, Final, cast, final
 
+from pydantic import PydanticUserError, TypeAdapter
+from pydantic_core import PydanticSerializationError
 from typing_extensions import override
-from xtr_messenger import default_codecs, name_of
+from xtr_messenger import Envelope, RedispatchMessage, name_of
+from xtr_serializer import PydanticNormalizer, SerializerError
 
 from ._time import FAR_FUTURE
 from .exception import InvalidArgumentError
@@ -23,12 +26,19 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
     from datetime import datetime, timedelta, tzinfo
 
+    from xtr_serializer import NormalizedValue
+
     from .generator.message_context import MessageContext
     from .trigger.trigger_interface import TriggerInterface
 
 __all__ = ["RecurringMessage"]
 
 _PROVIDER_ID_LENGTH = 7
+
+# Writes a message as the data it holds, for its id. A normalizer of its own, with no context,
+# rather than the application's serializer: an id must not change with how an application
+# configures what it sends. It does no I/O, and keeps nothing but the adapters it builds.
+_NORMALIZER: Final = PydanticNormalizer()
 
 
 @final
@@ -39,6 +49,10 @@ class RecurringMessage(MessageProviderInterface):
     :attr:`id` is derived from what it sends and when, so the same recurring
     message declared in two processes — or in one process across restarts —
     is recognised as the same one, which is what lets saved state resume it.
+    A message holding a set or a frozenset is the exception: its items are
+    written in the order the set keeps them, which can change from one
+    process to the next. So is one holding a value nothing can write, such
+    as a callable or a lock: it is told apart by its class alone.
     """
 
     __slots__ = ("_id", "_provider", "_trigger")
@@ -119,8 +133,8 @@ class RecurringMessage(MessageProviderInterface):
     def id(self) -> str:
         """Return what identifies this recurring message within a schedule.
 
-        Derived from what it sends and how its trigger describes itself, so it
-        is the same in every process.
+        Derived from the data it sends and how its trigger describes itself,
+        so it is the same in every process that declares it alike.
         """
         if self._id is None:
             identity = "".join(
@@ -166,18 +180,50 @@ def _qualified(kind: type) -> str:
 def _provider_id(message: object) -> str:
     """Return a short id for ``message``, the same in every process that builds it alike.
 
-    Built from the message's wire form when a codec handles it — the same
-    form it crosses a transport in — and from its ``repr`` otherwise, which
-    for a dataclass is stable too.
+    Built from the message's name and the data it holds, written as JSON with
+    sorted keys: two messages holding the same values get the same id whatever
+    the order their dicts were filled in, and two differing only in a field
+    left out of their ``repr`` get two.
     """
     kind = type(message)
-    codec = next((codec for codec in default_codecs() if codec.supports(kind)), None)
-    body = repr(message)
-    if codec is not None:
-        with suppress(Exception):  # a message the codec cannot carry keeps its repr
-            body = json.dumps(codec.encode(message), sort_keys=True)
+    body = json.dumps(_written(message), sort_keys=True, separators=(",", ":"))
     digest = hashlib.blake2b(f"{name_of(kind)}\n{body}".encode(), digest_size=16).digest()
     return base64.b64encode(digest).decode()[:_PROVIDER_ID_LENGTH].translate(_URL_SAFE)
+
+
+def _written(message: object) -> NormalizedValue:
+    """Return the data ``message`` holds, or ``None`` for one nothing can write.
+
+    A redispatch holds an envelope, which has none, so it is written as what it
+    carries and where to.
+
+    A message the serializer refuses — one that would not read back the same,
+    such as a naive datetime or a time in the hour the clocks repeat — still
+    has data that tells it apart from another of its class. It is written
+    without the read-back check, as pydantic writes JSON for its class: an
+    aware datetime with its offset, a naive one as its ISO text, an enum as
+    its value. Only a message holding something with no JSON form at all is
+    told apart by its class alone.
+    """
+    if isinstance(message, RedispatchMessage):
+        envelope = message.envelope
+        stamps = envelope.stamps if isinstance(envelope, Envelope) else ()
+        return {
+            "message": [name_of(type(message.message)), _written(message.message)],
+            "stamps": [[_qualified(type(stamp)), _written(stamp)] for stamp in stamps],
+            "transport_names": list(message.transport_names),
+        }
+    with suppress(SerializerError):
+        return _NORMALIZER.normalize(message)
+    try:
+        # Dumped in JSON mode, the result holds only what JSON does.
+        return cast(
+            "NormalizedValue",
+            TypeAdapter(type(message)).dump_python(message, mode="json", warnings=False),
+        )
+    # No schema for the class, or annotations that do not resolve; a value with no JSON form.
+    except (PydanticUserError, PydanticSerializationError):
+        return None
 
 
 _URL_SAFE = str.maketrans("/+", "._")

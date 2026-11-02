@@ -7,7 +7,15 @@ from typing import Final
 
 from .exception import InvalidArgumentError
 
-__all__ = ["EPOCH", "FAR_FUTURE", "aware", "from_microseconds", "microseconds"]
+__all__ = [
+    "EPOCH",
+    "FAR_FUTURE",
+    "aware",
+    "from_microseconds",
+    "microseconds",
+    "seconds_between",
+    "shifted",
+]
 
 EPOCH: Final = datetime(1970, 1, 1, tzinfo=UTC)
 
@@ -44,3 +52,21 @@ def microseconds(value: datetime) -> int:
 def from_microseconds(value: int, zone: tzinfo | None) -> datetime:
     """Return the instant ``value`` microseconds after the epoch, shown in ``zone``."""
     return (EPOCH + timedelta(microseconds=value)).astimezone(zone)
+
+
+def shifted(value: datetime, delta: timedelta) -> datetime:
+    """Return the instant ``delta`` of elapsed time after ``value``, shown in ``value``'s zone.
+
+    Not ``value + delta``: that moves the wall clock and drops ``fold``, so across
+    the hour a clock goes back it lands an hour away from the instant meant.
+    """
+    return from_microseconds(microseconds(value) + delta // _ONE_MICROSECOND, value.tzinfo)
+
+
+def seconds_between(start: datetime, end: datetime) -> float:
+    """Return the seconds that pass from ``start`` to ``end``, negative when ``end`` is earlier.
+
+    Not ``end - start``: two dates on one zone subtract by their wall clocks,
+    which ignore ``fold``, so the hour a clock goes back would count as none.
+    """
+    return (microseconds(end) - microseconds(start)) / 1_000_000

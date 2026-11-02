@@ -46,7 +46,7 @@ uv add xtr-console                                      # beside it: the debug:s
 
 | Extra | Brings | For |
 | --- | --- | --- |
-| *(none)* | `xtr-messenger`, `xtr-clock`, `xtr-lock`, `xtr-cache-contracts`, `xtr-event-dispatcher`, `xtr-event-dispatcher-contracts`, `xtr-service-contracts`, `typing-extensions` | Intervals, the transport, events |
+| *(none)* | `xtr-messenger`, `xtr-serializer`, `xtr-clock`, `xtr-lock`, `xtr-cache-contracts`, `xtr-event-dispatcher`, `xtr-event-dispatcher-contracts`, `xtr-service-contracts`, `pydantic`, `typing-extensions` | Intervals, the transport, events |
 | `cron` | `croniter` | `RecurringMessage.cron(...)` and `@as_cron_task` |
 
 No xtr package is an extra, and the container is not a dependency: the `SchedulerBundle` is used
@@ -95,7 +95,8 @@ RecurringMessage.every("1 hour", RedispatchMessage(BuildReport(), "reports"))  #
 
 `schedule://default?use_messenger_routing=true` does this for every message of the schedule.
 The message arrives carrying a `ScheduledStamp` — which schedule, which run — on whichever
-worker handles it.
+worker handles it. Its dates cross a broker as they left: a run in a named zone keeps the zone
+and its `fold`, so the two 03:00 runs of the night the clocks go back stay two runs.
 
 ## Recurring messages
 
@@ -347,6 +348,15 @@ returns, every schedule's lock is handed back, so another process takes over at 
 - Interval strings take one unit — `"90 minutes"`, not `"1 hour 30 minutes"`.
 - A `RedispatchMessage` holds an envelope and lives in the process that creates it; the message
   inside is what crosses a transport.
+- A recurring message's id is built from the data its message holds, written as JSON with sorted
+  keys. A set or frozenset inside the message is written in the order the set keeps it, which for
+  strings changes from one process to the next, and so does the id — hold a sorted tuple instead.
+  A message the serializer refuses to carry — a naive datetime, a time in the hour the clocks
+  repeat, a value of another type than its field declares — is still written for its id, as
+  pydantic writes it to JSON. Only a message holding something with no JSON form at all, a
+  callable or a lock, is told apart by its class alone: two of one class on one trigger in one
+  schedule are refused as duplicates — wrap each in a `StaticMessageProvider([message], "<id>")`
+  to name it.
 
 ## Errors
 

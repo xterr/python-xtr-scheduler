@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import final
 
 from xtr_messenger import StampInterface, as_stamp
+from xtr_serializer import ZonedDateTime
 
 from xtr_scheduler.generator.message_context import MessageContext
 from xtr_scheduler.trigger.serialized_trigger import SerializedTrigger
@@ -26,6 +27,10 @@ class ScheduledStamp(StampInterface):
     description: triggers hold functions and parsed expressions that cannot
     cross a transport, and a listener needs only to know what it was.
 
+    Its dates come back as they left: one in a named zone keeps that zone and
+    its ``fold`` — so a run in the hour the clocks repeat stays the run it
+    was — and one with a fixed offset, UTC included, keeps that offset.
+
     Attributes:
         name: The schedule's name.
         id: The recurring message's id within the schedule.
@@ -37,8 +42,8 @@ class ScheduledStamp(StampInterface):
     name: str
     id: str
     trigger: str
-    triggered_at: datetime
-    next_trigger_at: datetime | None = None
+    triggered_at: ZonedDateTime | datetime
+    next_trigger_at: ZonedDateTime | datetime | None = None
 
     @classmethod
     def from_context(cls, context: MessageContext) -> ScheduledStamp:

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Final, final
 from typing_extensions import override
 from xtr_clock import Clock
 
-from xtr_scheduler._time import EPOCH, microseconds
+from xtr_scheduler._time import EPOCH, microseconds, shifted
 from xtr_scheduler.exception import SchedulerLogicError
 from xtr_scheduler.trigger.stateful_trigger_interface import StatefulTriggerInterface
 
@@ -223,8 +223,11 @@ class MessageGenerator(MessageGeneratorInterface):
         # at or past 0) asks the triggers from one microsecond earlier: triggers
         # answer strictly after, so the runs due exactly at ``time`` come back,
         # and the checks in get_messages skip the part already sent. Later
-        # rebuilds follow a whole batch, so asking earlier would resend it.
-        probe = time - _ONE_MICROSECOND if not self._heap_initialized and last_index >= 0 else time
+        # rebuilds follow a whole batch, so asking earlier would resend it. Shifted as an
+        # instant: a wall-clock step back from the second pass of a repeated hour lands
+        # in the first, an hour too early.
+        resuming = not self._heap_initialized and last_index >= 0
+        probe = shifted(time, -_ONE_MICROSECOND) if resuming else time
         self._heap_initialized = True
         for index, recurring_message in enumerate(self.schedule.recurring_messages):
             trigger = recurring_message.get_trigger()

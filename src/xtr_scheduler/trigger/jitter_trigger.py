@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, final
 
 from typing_extensions import override
 
-from xtr_scheduler._time import microseconds
+from xtr_scheduler._time import microseconds, shifted
 from xtr_scheduler.exception import InvalidArgumentError
 
 from .abstract_decorated_trigger import AbstractDecoratedTrigger
@@ -71,15 +71,23 @@ class JitterTrigger(AbstractDecoratedTrigger):
         # ``run`` is a delayed instant, and delayed runs may land out of order when the
         # delay outlasts the interval: the next one is the earliest landing after ``run``
         # of any undelayed run a delay could carry past it.
+        # Every shift and comparison is on instants: on one zone, adding seconds moves the
+        # wall clock and comparing reads it, both ignoring fold, so the second pass of the
+        # hour a clock goes back would read as the first — and the same run come back.
+        run_at = microseconds(run)
         earliest: datetime | None = None
-        candidate = self._inner.get_next_run_date(run - timedelta(seconds=self._max_seconds))
+        earliest_at = 0
+        candidate = self._inner.get_next_run_date(
+            shifted(run, timedelta(seconds=-self._max_seconds))
+        )
         # A run after the earliest landing lands after it too.
-        while candidate is not None and (earliest is None or candidate < earliest):
-            delayed = candidate + timedelta(seconds=self._delay_of(candidate))
-            if delayed > run and (earliest is None or delayed < earliest):
-                earliest = delayed
+        while candidate is not None and (earliest is None or microseconds(candidate) < earliest_at):
+            delayed = shifted(candidate, timedelta(seconds=self._delay_of(candidate)))
+            delayed_at = microseconds(delayed)
+            if delayed_at > run_at and (earliest is None or delayed_at < earliest_at):
+                earliest, earliest_at = delayed, delayed_at
             advanced = self._inner.get_next_run_date(candidate)
-            if advanced is not None and advanced <= candidate:
+            if advanced is not None and microseconds(advanced) <= microseconds(candidate):
                 # A trigger that does not move forward: answer its run as it is, and
                 # let the scheduler report it rather than end the schedule quietly.
                 return earliest if earliest is not None else delayed

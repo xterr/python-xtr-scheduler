@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import inspect
+from datetime import datetime
 from typing import TYPE_CHECKING, cast, final
+from zoneinfo import ZoneInfo
 
 import pytest
 from typing_extensions import override
@@ -188,3 +190,13 @@ def test_the_command_requires_its_schedules() -> None:
 )
 def test_intervals_read_in_calendar_units(end: str, expected: str) -> None:
     assert _format_interval(at(START), at(end)) == expected
+
+
+def test_an_interval_into_the_second_pass_of_a_repeated_hour_is_ahead_not_overdue() -> None:
+    # Bucharest lives through 03:00-04:00 twice on 2026-10-25: 03:10 of the second
+    # pass comes forty minutes after 03:30 of the first.
+    bucharest = ZoneInfo("Europe/Bucharest")
+    start = datetime(2026, 10, 25, 3, 30, tzinfo=bucharest)
+    end = datetime(2026, 10, 25, 3, 10, fold=1, tzinfo=bucharest)
+
+    assert _format_interval(start, end) == "40 min"

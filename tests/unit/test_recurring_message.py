@@ -2,17 +2,25 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from datetime import timedelta
 from pathlib import Path
 
 import pytest
-from xtr_messenger import RedispatchMessage
+from xtr_messenger import Envelope, RedispatchMessage, TransportNamesStamp
 
 from tests.support.contexts import a_context
+from tests.support.identified_messages import (
+    RotateToken,
+    quotas,
+    refused_pairs,
+    restock,
+    unwritable_pairs,
+)
 from tests.support.messages import Named, Plain
-from xtr_scheduler import RecurringMessage
+from xtr_scheduler import RecurringMessage, Schedule
 from xtr_scheduler.exception import InvalidArgumentError
 from xtr_scheduler.trigger import (
     CallbackMessageProvider,
@@ -23,6 +31,26 @@ from xtr_scheduler.trigger import (
 )
 
 pytestmark = pytest.mark.anyio
+
+_IDS_SCRIPT = (
+    "from tests.support.identified_messages import RotateToken, quotas, refused_pairs, restock;"
+    "from xtr_scheduler import RecurringMessage;"
+    "refused = [m for pair in refused_pairs().values() for m in pair];"
+    "print(*(RecurringMessage.every('1 hour', m).id"
+    " for m in (quotas(), restock(), RotateToken('acme', 'token-A'), *refused)))"
+)
+_EXACT_IDS = ["d23e9b6f15e34ac3", "8f2a797a517487f6", "8fc02bf58183a1e5", "e303c5aee3d030a8"]
+
+
+def _ids_under_hash_seed(seed: str) -> str:
+    return subprocess.run(  # noqa: S603 — a fresh interpreter, running a fixed script
+        [sys.executable, "-c", _IDS_SCRIPT],
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=Path(__file__).parents[2],
+        env={**os.environ, "PYTHONHASHSEED": seed},
+    ).stdout.strip()
 
 
 def test_a_hashed_expression_picks_from_the_message_s_string_form() -> None:
@@ -67,6 +95,51 @@ def test_the_id_is_the_same_in_another_process() -> None:
     assert there == here
 
 
+def test_the_id_is_the_same_under_every_hash_seed() -> None:
+    ids = {seed: _ids_under_hash_seed(seed) for seed in ("1", "2", "3")}
+
+    assert len(set(ids.values())) == 1, ids
+    assert len(ids["1"].split()) == 3 + 2 * len(refused_pairs())
+
+
+def test_the_ids_of_exactly_written_messages_hold() -> None:
+    messages = [quotas(), restock(), RotateToken("acme", "token-A"), RotateToken("acme", "token-B")]
+
+    assert [RecurringMessage.every("1 hour", m).id for m in messages] == _EXACT_IDS
+
+
+@pytest.mark.parametrize(("first", "second"), refused_pairs().values(), ids=refused_pairs().keys())
+def test_a_message_the_serializer_refuses_is_identified_by_its_data(
+    first: object, second: object
+) -> None:
+    one = RecurringMessage.cron("0 9 * * *", first)
+    two = RecurringMessage.cron("0 9 * * *", second)
+
+    schedule = Schedule(one, two)
+
+    assert one.id != two.id
+    assert len(schedule.recurring_messages) == 2
+
+
+@pytest.mark.parametrize(
+    ("first", "second"), unwritable_pairs().values(), ids=unwritable_pairs().keys()
+)
+def test_a_message_nothing_can_write_is_identified_by_its_class(
+    first: object, second: object
+) -> None:
+    assert RecurringMessage.every(60, first).id == RecurringMessage.every(60, second).id
+
+
+def test_messages_differing_only_outside_their_repr_have_different_ids() -> None:
+    first = RecurringMessage.every("1 hour", RotateToken("acme", "token-A"))
+    second = RecurringMessage.every("1 hour", RotateToken("acme", "token-B"))
+
+    schedule = Schedule(first, second)
+
+    assert first.id != second.id
+    assert len(schedule.recurring_messages) == 2
+
+
 def test_every_builds_a_periodical_trigger() -> None:
     recurring = RecurringMessage.every(timedelta(minutes=5), Plain())
 
@@ -104,13 +177,40 @@ def test_with_jitter_returns_a_new_recurring_message_on_a_jitter_trigger() -> No
     assert isinstance(recurring.get_trigger(), PeriodicalTrigger)
 
 
-def test_a_message_no_codec_can_carry_is_identified_by_its_repr() -> None:
+def test_a_redispatched_message_is_identified_by_the_message_it_carries() -> None:
     first = RecurringMessage.every(60, RedispatchMessage(Named("a"), "urgent"))
     again = RecurringMessage.every(60, RedispatchMessage(Named("a"), "urgent"))
     other = RecurringMessage.every(60, RedispatchMessage(Named("b"), "urgent"))
+    elsewhere = RecurringMessage.every(60, RedispatchMessage(Named("a"), "reports"))
+
+    assert first.id == again.id
+    assert len({first.id, other.id, elsewhere.id}) == 3
+
+
+def test_a_redispatched_envelope_is_identified_by_its_stamps_too() -> None:
+    bare = RecurringMessage.every(60, RedispatchMessage(Envelope(Named("a"))))
+    stamped = RecurringMessage.every(
+        60, RedispatchMessage(Envelope(Named("a"), (TransportNamesStamp(("reports",)),)))
+    )
+
+    assert bare.id != stamped.id
+
+
+def test_a_message_with_no_plain_form_is_identified_by_its_class() -> None:
+    first = RecurringMessage.every(60, _Opaque())
+    again = RecurringMessage.every(60, _Opaque())
+    other = RecurringMessage.every(60, _OtherOpaque())
 
     assert first.id == again.id
     assert first.id != other.id
+
+
+class _Opaque:
+    """A message the serializer has no plain form for."""
+
+
+class _OtherOpaque:
+    """Another one, of another class."""
 
 
 def test_two_windows_of_one_message_are_two_recurring_messages() -> None:

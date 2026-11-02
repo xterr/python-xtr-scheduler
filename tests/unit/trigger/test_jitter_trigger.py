@@ -3,13 +3,33 @@
 from __future__ import annotations
 
 import random
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
+from itertools import pairwise
+from zoneinfo import ZoneInfo
 
 import pytest
 
 from tests.support.dates import at
 from xtr_scheduler.exception import InvalidArgumentError
-from xtr_scheduler.trigger import CallbackTrigger, JitterTrigger, PeriodicalTrigger
+from xtr_scheduler.trigger import (
+    CallbackTrigger,
+    CronExpressionTrigger,
+    JitterTrigger,
+    PeriodicalTrigger,
+)
+
+_BUCHAREST = ZoneInfo("Europe/Bucharest")
+
+_CLOCK_CHANGES = {
+    # 03:00 does not happen on 2026-03-29: the clocks go from 03:00 to 04:00.
+    "spring-forward": datetime(2026, 3, 27, 12, tzinfo=_BUCHAREST),
+    # 03:00 happens twice on 2026-10-25: the clocks go from 04:00 back to 03:00.
+    "fall-back": datetime(2026, 10, 23, 12, tzinfo=_BUCHAREST),
+}
+"""Noon a couple of days before each 2026 clock change in Bucharest."""
+
+_NIGHTS = 6
+"""Enough nights from each start to run through its clock change and out the other side."""
 
 
 def test_every_delay_is_within_the_bound_and_they_vary() -> None:
@@ -126,3 +146,49 @@ def test_it_describes_itself_through_what_it_wraps() -> None:
 def test_a_bound_that_is_not_positive_is_refused() -> None:
     with pytest.raises(InvalidArgumentError, match="max_seconds"):
         _ = JitterTrigger(PeriodicalTrigger(20), 0)
+
+
+def _nightly() -> CronExpressionTrigger:
+    return CronExpressionTrigger.from_expression("0 3 * * *", timezone="Europe/Bucharest")
+
+
+def _walk(trigger: CronExpressionTrigger | JitterTrigger, start: datetime) -> list[datetime]:
+    """Return the trigger's next runs from ``start``, each asked from the one before, in UTC."""
+    runs: list[datetime] = []
+    run = start
+    for _ in range(_NIGHTS):
+        next_run = trigger.get_next_run_date(run)
+        assert next_run is not None
+        runs.append(next_run.astimezone(UTC))
+        run = next_run
+    return runs
+
+
+@pytest.mark.parametrize("start", _CLOCK_CHANGES.values(), ids=_CLOCK_CHANGES.keys())
+@pytest.mark.parametrize("max_seconds", [1, 30, 59, 600])
+@pytest.mark.parametrize("key", ["", "purge", "report"])
+def test_jittered_runs_keep_moving_forward_across_a_clock_change(
+    start: datetime, max_seconds: int, key: str
+) -> None:
+    # The key seeds every delay, so each one draws a different set of them.
+    undelayed = _walk(_nightly(), start)
+
+    runs = _walk(JitterTrigger(_nightly(), max_seconds, key=key), start)
+
+    assert all(earlier < later for earlier, later in pairwise(runs))
+    assert all(
+        base <= run <= base + timedelta(seconds=max_seconds)
+        for base, run in zip(undelayed, runs, strict=True)
+    )
+
+
+def test_the_second_three_oclock_of_the_night_the_clocks_go_back_is_a_run_of_its_own() -> None:
+    jittered = JitterTrigger(_nightly(), 59)
+    first = jittered.get_next_run_date(datetime(2026, 10, 25, 2, 59, tzinfo=_BUCHAREST))
+    assert first is not None
+
+    second = jittered.get_next_run_date(first)
+
+    assert second is not None
+    repeated = datetime(2026, 10, 25, 1, tzinfo=UTC)  # 03:00 the second time, at +02:00
+    assert repeated <= second.astimezone(UTC) <= repeated + timedelta(seconds=59)

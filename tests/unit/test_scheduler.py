@@ -170,12 +170,45 @@ async def test_the_sleep_between_polls_is_never_negative() -> None:
     assert slow.slept == [0.0]
 
 
+async def test_the_sleep_between_polls_counts_the_time_that_passed_across_a_clock_change() -> None:
+    # Read in Bucharest, the two readings are 03:59:57+03:00 and 03:00:02+02:00:
+    # five seconds apart, though the wall clock went back by almost an hour.
+    slow = SlowClock("2026-10-25T00:59:57+00:00", "Europe/Bucharest")
+    scheduler = Scheduler({Named: Handler(1)}, [], slow)
+    slow.scheduler = scheduler
+
+    await scheduler.run(sleep=10.0)
+
+    assert slow.slept == [5.0]
+
+
+@pytest.mark.parametrize(
+    "start",
+    ["2026-03-27T12:00:00+02:00", "2026-10-23T12:00:00+03:00"],
+    ids=["spring-forward", "fall-back"],
+)
+@pytest.mark.parametrize("max_seconds", [30, 59])
+async def test_a_jittered_nightly_message_runs_every_night_across_a_clock_change(
+    start: str, max_seconds: int
+) -> None:
+    nightly = RecurringMessage.cron("0 3 * * *", Named("purge"), timezone="Europe/Bucharest")
+    handler = Handler(6)
+    clock = MockClock(start, "Europe/Bucharest")
+    scheduler = Scheduler({Named: handler}, [Schedule(nightly.with_jitter(max_seconds))], clock)
+    handler.scheduler = scheduler
+
+    await scheduler.run(sleep=300.0)
+
+    # Six nights, one of them with two runs when the clocks go back, and nothing raised.
+    assert handler.seen == [Named("purge")] * 6
+
+
 @final
 class SlowClock(ClockInterface):
     """A clock whose second reading jumps past a poll interval, recording what it sleeps."""
 
-    def __init__(self, start: str) -> None:
-        self._mock = MockClock(start)
+    def __init__(self, start: str, timezone: str | None = None) -> None:
+        self._mock = MockClock(start, timezone)
         self.slept: list[float] = []
         self.scheduler: Scheduler | None = None
         self._reads = 0

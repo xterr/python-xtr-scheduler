@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from xtr_messenger import Envelope, JsonSerializer
+from xtr_serializer import JsonEncoder, PydanticNormalizer, Serializer
 
 from xtr_scheduler.messenger import ServiceCallMessage
 
@@ -14,6 +15,6 @@ def test_it_describes_the_call() -> None:
 
 def test_it_crosses_a_transport() -> None:
     message = ServiceCallMessage("app.Reports", "nightly", ("eu", 3))
-    wire = JsonSerializer()
+    wire = JsonSerializer(Serializer([PydanticNormalizer()], [JsonEncoder()]))
 
     assert wire.decode(wire.encode(Envelope(message))).message == message
