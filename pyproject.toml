@@ -1,6 +1,6 @@
 [project]
 name = "xtr-scheduler"
-version = "5.2.1"
+version = "6.0.0"
 description = "Recurring messages on xtr-messenger: cron and periodic triggers, catch-up after downtime, locks and saved state across restarts."
 readme = "README.md"
 authors = [
@@ -24,18 +24,18 @@ dependencies = [
     # Writes a message the serializer refuses as JSON all the same, for its id.
     "pydantic>=2.12,<3",
     "typing-extensions>=4.4",
-    "xtr-cache-contracts>=5.0,<6",
-    "xtr-clock>=5.0,<6",
+    "xtr-cache-contracts>=6.0,<7",
+    "xtr-clock>=6.0,<7",
     # The implementation too, not only the contracts: a schedule keeps its own
     # before/after/failure listeners on an EventDispatcher, and the listener
     # announcing runs is an EventSubscriberInterface, which only it defines.
-    "xtr-event-dispatcher>=5.0,<6",
-    "xtr-event-dispatcher-contracts>=5.0,<6",
-    "xtr-lock>=5.0,<6",
-    "xtr-messenger>=5.0,<6",
+    "xtr-event-dispatcher>=6.0,<7",
+    "xtr-event-dispatcher-contracts>=6.0,<7",
+    "xtr-lock>=6.0,<7",
+    "xtr-messenger>=6.0,<7",
     # A scheduled stamp's dates are ZonedDateTime, so a run keeps its zone and fold.
-    "xtr-serializer>=5.0,<6",
-    "xtr-service-contracts>=5.0,<6",
+    "xtr-serializer>=6.0,<7",
+    "xtr-service-contracts>=6.0,<7",
 ]
 
 [project.optional-dependencies]
@@ -68,11 +68,11 @@ dev = [
     "ty>=0.0.83",
     "croniter>=6.2.4,<7",
     "types-croniter>=6.0",
-    "xtr-cache>=5.0,<6",
-    "xtr-console>=5.0,<6",
-    "xtr-dependency-injection>=5.0,<6",
-    "xtr-logging>=5.0,<6",
-    "xtr-service-contracts>=5.0,<6",
+    "xtr-cache>=6.0,<7",
+    "xtr-console>=6.0,<7",
+    "xtr-dependency-injection>=6.0,<7",
+    "xtr-logging>=6.0,<7",
+    "xtr-service-contracts>=6.0,<7",
 ]
 
 [build-system]
