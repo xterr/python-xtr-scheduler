@@ -39,7 +39,9 @@ _IDS_SCRIPT = (
     "print(*(RecurringMessage.every('1 hour', m).id"
     " for m in (quotas(), restock(), RotateToken('acme', 'token-A'), *refused)))"
 )
-_EXACT_IDS = ["d23e9b6f15e34ac3", "8f2a797a517487f6", "8fc02bf58183a1e5", "e303c5aee3d030a8"]
+# The ids of the messages' providers: written from the messages alone, so they hold whatever
+# the package is installed as, where the recurring message's own id also names its classes.
+_EXACT_PROVIDER_IDS = ["_rgdJDW", "fQRA8i9", "IhxEFOa", "_zjyq8L"]
 
 
 def _ids_under_hash_seed(seed: str) -> str:
@@ -105,7 +107,9 @@ def test_the_id_is_the_same_under_every_hash_seed() -> None:
 def test_the_ids_of_exactly_written_messages_hold() -> None:
     messages = [quotas(), restock(), RotateToken("acme", "token-A"), RotateToken("acme", "token-B")]
 
-    assert [RecurringMessage.every("1 hour", m).id for m in messages] == _EXACT_IDS
+    ids = [RecurringMessage.every("1 hour", m).get_provider().id for m in messages]
+
+    assert ids == _EXACT_PROVIDER_IDS
 
 
 @pytest.mark.parametrize(("first", "second"), refused_pairs().values(), ids=refused_pairs().keys())
