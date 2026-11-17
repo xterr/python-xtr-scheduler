@@ -631,3 +631,30 @@ async def test_two_processes_sharing_a_lock_and_a_cache_send_each_run_once() -> 
 
     assert sent == [moment("22:16:00")]
     assert taken_over == [moment("22:17:00")]
+
+
+async def test_a_batch_whose_lock_is_lost_stops_without_saving() -> None:
+    clock = clock_at("22:15:00")
+    store, cache = InMemoryStore(), ArrayAdapter()
+
+    def process(key: Key) -> MessageGenerator:
+        schedule = Schedule(
+            RecurringMessage.every("1 minute", FIRST), RecurringMessage.every("1 minute", SECOND)
+        )
+        checkpoint = Checkpoint("dummy", Lock(key, store, 60, clock=clock), cache)
+        return MessageGenerator(schedule, "dummy", clock, checkpoint)
+
+    key = Key("schedule")
+    first = process(key)
+    assert await drain(first) == []
+    clock.sleep(70)
+
+    sent: list[object] = []
+    async with aclosing(first.get_messages()) as messages:
+        async for _context, message in messages:
+            sent.append(message)
+            await store.delete(key)  # the lock runs out under the batch
+
+    assert sent == [FIRST]
+    # Nothing of the stopped batch was saved: whoever holds the lock now sends it all.
+    assert await drain(process(Key("schedule"))) == [FIRST, SECOND]

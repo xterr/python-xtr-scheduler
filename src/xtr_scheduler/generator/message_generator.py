@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import aclosing
 from datetime import timedelta
 from typing import TYPE_CHECKING, Final, final
 
@@ -148,18 +149,17 @@ class MessageGenerator(MessageGeneratorInterface):
                 if not send:
                     continue
                 context = MessageContext(self._name, recurring_message.id, trigger, time, next_time)
-                # Record the run only once at least one of its messages was
-                # handed on: a provider that raises or is cancelled before
-                # yielding leaves the checkpoint untouched, so the next pass
-                # runs it again — delivery is at least once, never zero.
-                started = False
-                try:
-                    async for message in recurring_message.get_messages(context):
-                        started = True
+                kept = [True]
+                run = (time, index)
+                # Closed with the batch: a run stopped early is recorded before the lock goes back.
+                async with aclosing(
+                    _run(checkpoint, recurring_message, context, run, kept)
+                ) as sent:
+                    async for message in sent:
                         yield context, message
-                finally:
-                    if started:
-                        await checkpoint.save(time, index)
+                if not kept[0]:
+                    # Lost to another process: what is left of the batch is its to send.
+                    return
         finally:
             # A run that ended — iteration stopped early, or building the plan
             # failed — still hands the lock back. With a plan, say what is due
@@ -267,3 +267,34 @@ class MessageGenerator(MessageGeneratorInterface):
                 f"scheduler_checkpoint_{self._name}", schedule.get_lock(), schedule.get_state()
             )
         return self._checkpoint
+
+
+async def _run(
+    checkpoint: CheckpointInterface,
+    recurring_message: RecurringMessage,
+    context: MessageContext,
+    run: tuple[datetime, int],
+    kept: list[bool],
+) -> AsyncGenerator[object]:
+    """Yield one run's messages while this process keeps the schedule, then record ``run``.
+
+    The run is recorded only once at least one of its messages was handed
+    on: a provider that raises or is cancelled before yielding leaves the
+    checkpoint untouched, so the next pass runs it again — delivery is at
+    least once, never zero. Asked before each message and before the record,
+    a hold that ran out stops the run there and records nothing; ``kept``
+    then holds ``False`` so the caller stops the batch too.
+    """
+    started = False
+    try:
+        async for message in recurring_message.get_messages(context):
+            kept[0] = await checkpoint.keep()
+            if not kept[0]:
+                return
+            started = True
+            yield message
+    finally:
+        if started and kept[0]:
+            kept[0] = await checkpoint.keep()
+            if kept[0]:
+                await checkpoint.save(*run)

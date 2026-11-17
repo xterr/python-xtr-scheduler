@@ -146,6 +146,13 @@ schedule = (
 Between runs the lock is kept until the next one is due. A worker that stops gives it back, so
 the next process takes over at once; one that crashes leaves it to run out.
 
+While a batch runs, the lock is refreshed before each message is handed on and before the batch
+is saved — a lock without a lifetime is asked whether it is still held. A batch whose lock was
+lost meanwhile stops there, quietly and without saving: whoever holds the lock now sends what is
+left. A single message held longer than the lock's lifetime may still be sent again by the
+process taking over — delivery is at least once — so give the lock a lifetime longer than a
+message takes.
+
 A pool that fails to save stops the schedule with `SchedulerRuntimeError` rather than carrying on:
 going on would send every run again after a restart, or nothing at all.
 
@@ -364,6 +371,11 @@ Everything the library raises derives from `SchedulerError`: `InvalidArgumentErr
 cannot use — an interval, a date, an unknown schedule), `SchedulerLogicError` (a trigger that does
 not move forward, a message added twice, a transport asked to send) and `SchedulerRuntimeError`
 (state that could not be saved).
+
+## Upgrading
+
+What changes for an application moving to 7.0, and how to keep the old behaviour where that is
+still possible: [Upgrading to 7.0](../../UPGRADING.md#xtr-scheduler).
 
 ## Development
 

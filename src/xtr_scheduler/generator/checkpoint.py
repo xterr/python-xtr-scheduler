@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Final, final
 
 from typing_extensions import override
+from xtr_lock import LockConflictedError, LockExpiredError
 
 from xtr_scheduler._time import microseconds
 from xtr_scheduler.exception import SchedulerRuntimeError
@@ -41,7 +42,7 @@ class Checkpoint(CheckpointInterface):
     the cache says otherwise: another process ran the schedule meanwhile.
     """
 
-    __slots__ = ("_cache", "_from", "_index", "_lock", "_name", "_reset", "_time")
+    __slots__ = ("_cache", "_from", "_index", "_lock", "_lost", "_name", "_reset", "_time")
 
     def __init__(
         self,
@@ -57,9 +58,11 @@ class Checkpoint(CheckpointInterface):
         self._time: datetime | None = None
         self._index = -1
         self._reset = False
+        self._lost = False
 
     @override
     async def acquire(self, now: datetime, /) -> bool:
+        self._lost = False
         if self._lock is not None and not await self._lock.acquire():
             # Another process has it, and what this one remembers will be stale
             # by the time it gets it back — unless a cache says where it got to.
@@ -126,8 +129,31 @@ class Checkpoint(CheckpointInterface):
             )
 
     @override
+    async def keep(self) -> bool:
+        """Refresh a lock that has a lifetime, or ask one without whether it is still held.
+
+        ``False`` once another process may hold it: the lifetime ran out, or
+        the store no longer has this process as the holder.
+        """
+        lock = self._lock
+        if lock is None:
+            return True
+        if lock.get_remaining_lifetime() is None:
+            # Nothing to extend — a store that sets no lifetime — but it can still be taken away.
+            held = await lock.is_acquired()
+            self._lost = not held
+            return held
+        try:
+            await lock.refresh()
+        except (LockConflictedError, LockExpiredError):
+            self._lost = True
+            return False
+        return True
+
+    @override
     async def release(self, now: datetime, next_time: datetime | None, /) -> None:
-        if self._lock is None:
+        if self._lock is None or self._lost:
+            # A lock lost under the run may be another process's by now: not fought over.
             return
         if next_time is None:
             await self._lock.release()

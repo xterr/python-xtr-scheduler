@@ -272,3 +272,42 @@ async def test_closing_leaves_a_lock_held_by_another_process_alone() -> None:
 
 async def test_closing_without_a_lock_does_nothing() -> None:
     await Checkpoint("dummy").close()
+
+
+async def test_keeping_without_a_lock_always_may_go_on() -> None:
+    assert await Checkpoint("dummy").keep()
+
+
+async def test_keeping_refreshes_a_lock_with_a_lifetime() -> None:
+    lock = RecordingLock(remaining=2)
+    checkpoint = Checkpoint("timed", lock)
+    assert await checkpoint.acquire(NOW)
+
+    assert await checkpoint.keep()
+
+    assert lock.refreshed == [None]  # the lifetime the lock was made with, from now
+
+
+async def test_keeping_a_lock_another_process_took_says_to_stop() -> None:
+    store = InMemoryStore()
+    key = Key("timed")
+    checkpoint = Checkpoint("timed", Lock(key, store, 10))
+    assert await checkpoint.acquire(NOW)
+    await store.delete(key)
+    assert await locked("timed", store).acquire()
+
+    assert not await checkpoint.keep()
+    # A lock lost under a batch is not fought over on the way out either.
+    await checkpoint.release(NOW, NOW + timedelta(minutes=1))
+
+
+async def test_keeping_a_lock_without_a_lifetime_asks_whether_it_is_still_held() -> None:
+    store = InMemoryStore()
+    key = Key("untimed")
+    checkpoint = Checkpoint("untimed", Lock(key, store))
+    assert await checkpoint.acquire(NOW)
+    assert await checkpoint.keep()
+
+    await store.delete(key)
+
+    assert not await checkpoint.keep()

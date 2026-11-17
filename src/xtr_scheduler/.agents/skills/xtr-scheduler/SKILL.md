@@ -18,6 +18,7 @@ any other transport. Handlers, transports and routing are xtr-messenger's job â€
   `Schedule` from `xtr_scheduler`.
 - `.lock(lock)` so one process sends, `.stateful(pool)` so a restart resumes,
   `.process_only_last_missed_run()` to skip a backlog.
+  The lock is refreshed before every message of a batch; a batch that lost it stops unsaved.
 - Run it: `<script> messenger:consume scheduler_<name>`.
 - In an application, with xtr-dependency-injection installed beside the package (it is not a
   dependency): activate `SchedulerBundle`. Without the container, the `schedule://` transport

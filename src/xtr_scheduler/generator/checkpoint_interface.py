@@ -45,6 +45,15 @@ class CheckpointInterface(Protocol):
         """Record that the message at ``index``, due at ``time``, was sent."""
         ...
 
+    async def keep(self) -> bool:
+        """Tell whether this process still holds the schedule, extending its hold if it can.
+
+        Asked before each message of a run is handed on and before the run is
+        saved: a run whose hold ran out — another process may be running the
+        schedule now — stops there, saving nothing.
+        """
+        ...
+
     async def release(self, now: datetime, next_time: datetime | None, /) -> None:
         """Hand the schedule back until ``next_time`` — for good when there is none."""
         ...
