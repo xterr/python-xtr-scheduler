@@ -4,7 +4,7 @@
 
 **Recurring messages on xtr-messenger: cron and periodic triggers, catch-up after downtime, locks and saved state across restarts.**
 
-<img alt="python 3.11+" src="https://img.shields.io/badge/python-%E2%89%A5%203.11-3776AB?logo=python&logoColor=white">
+<img alt="python 3.14+" src="https://img.shields.io/badge/python-%E2%89%A5%203.14-3776AB?logo=python&logoColor=white">
 <img alt="asyncio" src="https://img.shields.io/badge/asyncio-native-1f6feb">
 <img alt="typed" src="https://img.shields.io/badge/typed-ty%20%2B%20basedpyright-1f6feb">
 <img alt="license MIT" src="https://img.shields.io/badge/license-MIT-blue">
@@ -46,7 +46,7 @@ uv add xtr-console                                      # beside it: the debug:s
 
 | Extra | Brings | For |
 | --- | --- | --- |
-| *(none)* | `xtr-messenger`, `xtr-serializer`, `xtr-clock`, `xtr-lock`, `xtr-cache-contracts`, `xtr-event-dispatcher`, `xtr-event-dispatcher-contracts`, `xtr-service-contracts`, `pydantic`, `typing-extensions` | Intervals, the transport, events |
+| *(none)* | `xtr-messenger`, `xtr-serializer`, `xtr-clock`, `xtr-lock`, `xtr-cache-contracts`, `xtr-event-dispatcher`, `xtr-event-dispatcher-contracts`, `xtr-service-contracts`, `pydantic` | Intervals, the transport, events |
 | `cron` | `croniter` | `RecurringMessage.cron(...)` and `@as_cron_task` |
 
 No xtr package is an extra, and the container is not a dependency: the `SchedulerBundle` is used
@@ -56,7 +56,7 @@ as the [Quick start](#quick-start) shows. With the container in place,
 [xtr-console](../xtr-console) brings `debug:scheduler`, and [xtr-cache](../xtr-cache), with its
 bundle active, a `scheduler` pool for a schedule to keep its state in.
 
-Requires Python 3.11+.
+Requires Python 3.14.4+.
 
 ## Quick start
 
@@ -279,9 +279,8 @@ schedule the tasks join; this is a good first one to copy into the application:
 
 ```python
 # app/schedule.py
-from typing import Annotated
+from typing import Annotated, override
 
-from typing_extensions import override
 from xtr_cache_contracts import CacheInterface
 from xtr_dependency_injection import Target
 from xtr_lock import LockFactory

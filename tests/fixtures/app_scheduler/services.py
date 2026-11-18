@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import override
 
-from typing_extensions import override
 from xtr_dependency_injection import Injected, as_service
 from xtr_messenger import as_message_handler
 

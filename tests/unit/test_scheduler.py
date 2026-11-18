@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Self, final
+from typing import TYPE_CHECKING, Self, final, override
 
 import pytest
-from typing_extensions import override
 from xtr_clock import ClockInterface, MockClock
 from xtr_event_dispatcher import EventDispatcher
 from xtr_lock import InMemoryStore, Key, Lock

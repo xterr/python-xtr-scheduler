@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from xtr_scheduler.registry.task_declaration import TaskDeclaration
 
-from ._task_decorator import TargetT, declaring, names
+from ._task_decorator import declaring, names
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 __all__ = ["as_cron_task"]
 
 
-def as_cron_task(  # noqa: PLR0913 — one keyword per thing a task can declare
+def as_cron_task[TargetT](  # noqa: PLR0913 — one keyword per thing a task can declare
     expression: str,
     *,
     timezone: str | None = None,

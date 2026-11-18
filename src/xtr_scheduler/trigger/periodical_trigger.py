@@ -5,9 +5,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Final, final
+from typing import Final, final, override
 
-from typing_extensions import override
 from xtr_clock import shift_calendar
 
 from xtr_scheduler._time import (

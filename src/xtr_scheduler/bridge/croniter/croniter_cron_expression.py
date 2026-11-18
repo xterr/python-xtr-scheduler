@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, final
+from typing import TYPE_CHECKING, final, override
 
 from croniter import croniter
-from typing_extensions import override
 
 from xtr_scheduler.exception import InvalidArgumentError
 from xtr_scheduler.trigger.cron_expression_interface import CronExpressionInterface

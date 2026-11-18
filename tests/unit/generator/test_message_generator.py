@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from contextlib import aclosing
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, final
+from typing import TYPE_CHECKING, final, override
 
 import pytest
-from typing_extensions import override
 from xtr_cache.adapter import ArrayAdapter
 from xtr_clock import MockClock
 from xtr_lock import InMemoryStore, Key, Lock

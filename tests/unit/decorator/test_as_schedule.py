@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from typing import override
+
 import pytest
-from typing_extensions import override
 
 from xtr_scheduler import Schedule, ScheduleProviderInterface
 from xtr_scheduler.decorator import as_schedule

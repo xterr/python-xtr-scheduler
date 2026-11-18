@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Final, final
+from typing import TYPE_CHECKING, Final, final, override
 
-from typing_extensions import override
 from xtr_lock import LockConflictedError, LockExpiredError
 
 from xtr_scheduler._time import microseconds
@@ -145,7 +144,7 @@ class Checkpoint(CheckpointInterface):
             return held
         try:
             await lock.refresh()
-        except (LockConflictedError, LockExpiredError):
+        except LockConflictedError, LockExpiredError:
             self._lost = True
             return False
         return True

@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar, final
+from typing import TYPE_CHECKING, ClassVar, final, override
 
-from typing_extensions import override
 from xtr_event_dispatcher import EventSubscriberInterface
 from xtr_event_dispatcher_contracts import EventDispatcherInterface
 from xtr_messenger import Envelope, HandledStamp, RedispatchMessage

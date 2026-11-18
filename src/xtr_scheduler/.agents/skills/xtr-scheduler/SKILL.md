@@ -115,9 +115,8 @@ workers both send every run. Declare the schedule they join to choose otherwise.
 
 ```python
 # app/schedule.py
-from typing import Annotated
+from typing import Annotated, override
 
-from typing_extensions import override
 from xtr_cache_contracts import CacheInterface
 from xtr_dependency_injection import Target
 from xtr_lock import LockFactory

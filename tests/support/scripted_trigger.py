@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import final
-
-from typing_extensions import override
+from typing import final, override
 
 from xtr_scheduler.trigger import TriggerInterface
 

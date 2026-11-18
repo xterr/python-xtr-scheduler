@@ -12,13 +12,12 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
-from typing import TYPE_CHECKING, final
+from typing import TYPE_CHECKING, final, override
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel
 from pydantic_core import core_schema
-from typing_extensions import override
 from xtr_messenger import as_message
 
 if TYPE_CHECKING:

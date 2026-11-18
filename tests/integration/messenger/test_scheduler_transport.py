@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, final
+from typing import TYPE_CHECKING, final, override
 
 import pytest
-from typing_extensions import override
 from xtr_clock import MockClock
 from xtr_event_dispatcher import EventDispatcher
 from xtr_messenger import (

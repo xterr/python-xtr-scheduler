@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from typing import final
+from typing import final, override
 
-from typing_extensions import override
 from xtr_cache import CacheItem
 from xtr_cache_contracts import CacheMixin, ItemInterface
 

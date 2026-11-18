@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Final, final
+from typing import TYPE_CHECKING, Final, final, override
 from urllib.parse import urlsplit
 
-from typing_extensions import override
 from xtr_messenger import TransportFactoryInterface
 from xtr_messenger.transport.transport_options import as_bool, reject_unknown_options
 

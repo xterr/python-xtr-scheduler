@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, final
+from typing import TYPE_CHECKING, final, override
 
-from typing_extensions import override
 from xtr_service_contracts import ServiceProviderInterface
 
 from xtr_scheduler._built_services import BuiltServices

@@ -6,11 +6,10 @@ import base64
 import hashlib
 import json
 from contextlib import suppress
-from typing import TYPE_CHECKING, Final, cast, final
+from typing import TYPE_CHECKING, Final, cast, final, override
 
 from pydantic import PydanticUserError, TypeAdapter
 from pydantic_core import PydanticSerializationError
-from typing_extensions import override
 from xtr_messenger import Envelope, RedispatchMessage, name_of
 from xtr_serializer import PydanticNormalizer, SerializerError
 
@@ -222,7 +221,7 @@ def _written(message: object) -> NormalizedValue:
             TypeAdapter(type(message)).dump_python(message, mode="json", warnings=False),
         )
     # No schema for the class, or annotations that do not resolve; a value with no JSON form.
-    except (PydanticUserError, PydanticSerializationError):
+    except PydanticUserError, PydanticSerializationError:
         return None
 
 

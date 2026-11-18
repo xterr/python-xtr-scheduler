@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
-
-from typing_extensions import override
+from typing import TYPE_CHECKING, Protocol, override, runtime_checkable
 
 if TYPE_CHECKING:
     from datetime import datetime

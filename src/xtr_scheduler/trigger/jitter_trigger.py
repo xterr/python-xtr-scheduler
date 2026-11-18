@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import random
 from datetime import timedelta
-from typing import TYPE_CHECKING, final
-
-from typing_extensions import override
+from typing import TYPE_CHECKING, final, override
 
 from xtr_scheduler._time import microseconds, shifted
 from xtr_scheduler.exception import InvalidArgumentError

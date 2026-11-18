@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Generic, TypeVar, final
+from typing import TYPE_CHECKING, final, override
 
-from typing_extensions import override
 from xtr_service_contracts import ServiceProviderInterface
 
 from .exception import InvalidArgumentError
@@ -15,22 +14,20 @@ if TYPE_CHECKING:
 
 __all__ = ["BuiltServices"]
 
-_T = TypeVar("_T")
-
 
 @final
-class BuiltServices(ServiceProviderInterface[_T], Generic[_T]):
+class BuiltServices[T](ServiceProviderInterface[T]):
     """Hands over services from a mapping — the locator for code with no container."""
 
     __slots__ = ("_services", "_what")
 
-    def __init__(self, services: Mapping[str, _T], what: str) -> None:
+    def __init__(self, services: Mapping[str, T], what: str) -> None:
         """Hand over ``services``; ``what`` names them in the error for a missing one."""
         self._services = dict(services)
         self._what = what
 
     @override
-    async def get(self, name: Hashable, /) -> _T:
+    async def get(self, name: Hashable, /) -> T:
         """Return the service ``name``.
 
         Raises:

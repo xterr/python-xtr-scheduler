@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import inspect
 from datetime import datetime
-from typing import TYPE_CHECKING, cast, final
+from typing import TYPE_CHECKING, cast, final, override
 from zoneinfo import ZoneInfo
 
 import pytest
-from typing_extensions import override
 from xtr_cache.adapter import ArrayAdapter
 from xtr_clock.testing import mock_time
 from xtr_console import Application, CommandTester, ExitCode

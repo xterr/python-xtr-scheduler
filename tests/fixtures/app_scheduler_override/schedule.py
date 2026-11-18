@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import override
 
-from typing_extensions import override
 from xtr_event_dispatcher import as_event_listener
 from xtr_messenger.event import WorkerMessageHandledEvent, WorkerRunningEvent
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING
 
 from xtr_scheduler.registry.declarations import declare_schedule
 
@@ -13,10 +13,10 @@ if TYPE_CHECKING:
 
 __all__ = ["as_schedule"]
 
-ProviderT = TypeVar("ProviderT", bound="type[ScheduleProviderInterface]")
 
-
-def as_schedule(name: str = "default") -> Callable[[ProviderT], ProviderT]:
+def as_schedule[ProviderT: "type[ScheduleProviderInterface]"](
+    name: str = "default",
+) -> Callable[[ProviderT], ProviderT]:
     """Declare the decorated class as the provider of the schedule ``name``.
 
     For example::

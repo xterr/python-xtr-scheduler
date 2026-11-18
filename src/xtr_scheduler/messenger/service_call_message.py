@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import final
+from typing import final, override
 
-from typing_extensions import override
 from xtr_messenger import as_message
 
 __all__ = ["ServiceCallMessage"]

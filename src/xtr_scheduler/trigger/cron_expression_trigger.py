@@ -5,9 +5,8 @@ from __future__ import annotations
 import hashlib
 import random
 import re
-from typing import TYPE_CHECKING, Final, final
+from typing import TYPE_CHECKING, Final, final, override
 
-from typing_extensions import override
 from xtr_clock import InvalidTimezoneError, resolve_timezone
 
 from xtr_scheduler.exception import InvalidArgumentError, SchedulerLogicError

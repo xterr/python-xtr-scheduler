@@ -5,11 +5,10 @@ from __future__ import annotations
 import re
 from datetime import datetime, tzinfo
 from itertools import pairwise
-from typing import final
+from typing import final, override
 from zoneinfo import ZoneInfo
 
 import pytest
-from typing_extensions import override
 
 from tests.support.dates import at
 from xtr_scheduler.exception import InvalidArgumentError, SchedulerLogicError

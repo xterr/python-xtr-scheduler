@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 from contextlib import aclosing
-from typing import TYPE_CHECKING, final
-
-from typing_extensions import override
+from typing import TYPE_CHECKING, final, override
 
 from xtr_scheduler._time import EPOCH
 from xtr_scheduler.generator.message_generator import MessageGenerator

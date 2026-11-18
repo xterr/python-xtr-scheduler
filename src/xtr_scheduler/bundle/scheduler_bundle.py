@@ -14,9 +14,8 @@ their state in.
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import TYPE_CHECKING, Final, cast, final
+from typing import TYPE_CHECKING, Final, cast, final, override
 
-from typing_extensions import override
 from xtr_clock import ClockInterface
 from xtr_dependency_injection import (
     Bundle,

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from xtr_scheduler.registry.task_declaration import TaskDeclaration
 
-from ._task_decorator import TargetT, declaring, names
+from ._task_decorator import declaring, names
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 __all__ = ["as_periodic_task"]
 
 
-def as_periodic_task(  # noqa: PLR0913 — one keyword per thing a task can declare
+def as_periodic_task[TargetT](  # noqa: PLR0913 — one keyword per thing a task can declare
     frequency: float | str | timedelta,
     *,
     from_: datetime | str | None = None,
